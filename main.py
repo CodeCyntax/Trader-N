@@ -147,8 +147,8 @@ class TraderAgent:
 
         self.broker.set_curve(mint, curve)
 
-        # Broadcast live trade to browser dashboard
-        if self.web_server:
+        # Broadcast live trade to browser dashboard only if clients are connected
+        if self.web_server and self.web_server.active_sockets:
             asyncio.create_task(self.web_server.broadcast_trade(trade.model_dump()))
 
         # 2. Update smart wallet profile and check persistence

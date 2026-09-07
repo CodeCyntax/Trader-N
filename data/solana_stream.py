@@ -125,6 +125,9 @@ class SolanaTradeStream:
                             if trade:
                                 self.on_trade_callback(trade)
 
+                        # Yield control to asyncio event loop to allow HTTP health probes & timers
+                        await asyncio.sleep(0)
+
             except asyncio.CancelledError:
                 break
             except Exception as e:

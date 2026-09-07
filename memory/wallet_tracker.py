@@ -107,7 +107,7 @@ class WalletTracker:
         self._evaluate_wallet_persistence(profile)
 
         # Persist periodically or when reaching evaluation milestone
-        if profile.total_trades % 2 == 0 or profile.persistence_score > 0.3:
+        if profile.total_trades % 5 == 0 or (profile.persistence_score >= 0.35 and profile.total_trades % 2 == 0):
             self.db.upsert_wallet(profile)
 
         return profile
