@@ -32,5 +32,5 @@ EXPOSE 8080
 # Volume for database and learned memory persistence
 VOLUME ["/app/data_store"]
 
-# Entrypoint: start agent with web dashboard on configured port
-CMD ["python", "main.py", "--port", "8080"]
+# Entrypoint: start agent with web dashboard (respects $PORT if provided by cloud host)
+CMD ["python", "main.py"]

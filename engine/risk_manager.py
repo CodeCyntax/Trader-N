@@ -2,8 +2,9 @@
 Autonomous Risk Manager & Dynamic Sizing Engine.
 Decides position sizing based on learned confidence and autonomously manages trade exits.
 """
+from __future__ import annotations
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any, Union
 from core.models import PaperPosition, StrategyParameters
 from core.constants import (
     INITIAL_BASE_TRADE_SOL,

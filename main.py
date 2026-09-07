@@ -6,6 +6,7 @@ and continuous episodic learning.
 import asyncio
 import argparse
 import logging
+import os
 import signal
 import sys
 import time
@@ -406,8 +407,9 @@ def main():
     parser.add_argument("--balance", type=float, help="Set initial paper trading balance in SOL")
     parser.add_argument("--deposit", type=float, help="Deposit SOL into paper balance")
     parser.add_argument("--withdraw", type=float, help="Withdraw SOL from paper balance")
+    default_port = int(os.getenv("PORT", 8080))
     parser.add_argument("--interval", type=int, default=15, help="Terminal dashboard refresh interval (seconds)")
-    parser.add_argument("--port", type=int, default=8080, help="Web dashboard server port (default: 8080)")
+    parser.add_argument("--port", type=int, default=default_port, help=f"Web dashboard server port (default: {default_port})")
     parser.add_argument("--no-web", action="store_true", help="Disable the browser web UI dashboard")
     args = parser.parse_args()
 

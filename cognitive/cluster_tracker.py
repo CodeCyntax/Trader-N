@@ -2,10 +2,11 @@
 Probabilistic Cluster Tracker & Identity Evolution (Drift) Engine.
 Unmasks entity syndicates, temporal bundle synchrony, and behavioral regime shifts.
 """
+from __future__ import annotations
 import math
 import time
 import logging
-from typing import Dict, List, Set, Optional, Tuple
+from typing import Dict, List, Set, Optional, Tuple, Any
 from core.models import TradeEvent, TradeType, ClusterHypothesis, ClusterArchetype
 from memory.database import DatabaseManager
 
