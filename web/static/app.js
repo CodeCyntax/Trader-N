@@ -118,7 +118,13 @@ function showToast(title, message, type = 'info') {
 // --- WebSocket Connection ---
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token') || urlParams.get('auth') || sessionStorage.getItem('trader_auth_token') || '';
+    if (token) {
+        sessionStorage.setItem('trader_auth_token', token);
+    }
+    const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+    const wsUrl = `${protocol}//${window.location.host}/ws${qs}`;
 
     ws = new WebSocket(wsUrl);
 

@@ -58,7 +58,12 @@ class WebDashboardServer:
             if request.path == "/health":
                 return await handler(request)
 
-            # 2. HTTP Basic Auth Header
+            # 2. Cookie authentication (used by browser WebSockets & REST APIs)
+            cookie_token = request.cookies.get("trader_auth_token")
+            if cookie_token and cookie_token == self.auth_pass:
+                return await handler(request)
+
+            # 3. HTTP Basic Auth Header
             auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Basic "):
                 try:
@@ -69,7 +74,7 @@ class WebDashboardServer:
                 except Exception:
                     pass
 
-            # 3. Query parameter auth (used by browser WebSockets or 1-click download links)
+            # 4. Query parameter auth (used by browser WebSockets or 1-click download links)
             token = request.query.get("token") or request.query.get("auth")
             if token and token == self.auth_pass:
                 return await handler(request)
@@ -109,7 +114,16 @@ class WebDashboardServer:
         index_path = TEMPLATES_DIR / "index.html"
         if not index_path.exists():
             return web.Response(text="Dashboard template not found", status=404)
-        return web.Response(text=index_path.read_text(), content_type="text/html")
+        response = web.Response(text=index_path.read_text(), content_type="text/html")
+        if self.auth_enabled and self.auth_pass:
+            response.set_cookie(
+                "trader_auth_token",
+                self.auth_pass,
+                httponly=False,
+                samesite="Lax",
+                max_age=86400 * 30,
+            )
+        return response
 
     async def handle_ws(self, request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse()
