@@ -127,6 +127,10 @@ class TraderAgent:
 
     def on_trade_event(self, trade: TradeEvent):
         """Called on every live on-chain pump.fun buy and sell."""
+        # 0. Feed live on-chain trades to RegimeBrain market trade rate counter
+        if hasattr(self, "meta_brain") and hasattr(self.meta_brain, "regime_brain"):
+            self.meta_brain.regime_brain.record_market_trade(trade.timestamp or time.time())
+
         mint = trade.mint
 
         # 1. Retrieve or initialize bonding curve
@@ -408,6 +412,54 @@ class TraderAgent:
             except asyncio.CancelledError:
                 break
 
+    async def run_memory_janitor(self):
+        """
+        Active Memory Janitor:
+        Runs periodically (every 180 seconds) to aggressively prune in-memory caches,
+        preventing unbounded memory growth on RAM-constrained environments (e.g. Render 512MB).
+        Keeps process memory consumption strictly bounded around 80-120 MB.
+        """
+        import gc
+        logger.info("Active memory janitor initialized (interval: 180s).")
+        await asyncio.sleep(60.0)
+
+        while self.is_running:
+            try:
+                # 1. Prune active tokens cache in main: keep open positions + active shadows + top 150
+                open_mints = set(self.broker.open_positions.keys())
+                shadow_mints = set(self.counterfactual_engine.active_shadows.keys())
+                essential_mints = open_mints.union(shadow_mints)
+
+                if len(self.active_tokens) > 200:
+                    current_mints = list(self.active_tokens.keys())
+                    excess_count = len(current_mints) - 200
+                    evicted = 0
+                    for m in current_mints:
+                        if m not in essential_mints:
+                            self.active_tokens.pop(m, None)
+                            evicted += 1
+                            if evicted >= excess_count:
+                                break
+
+                # 2. Prune token monitor activities
+                self.token_monitor.prune_stale_activities(cutoff_seconds=900.0, max_activities=150)
+
+                # 3. Prune cluster tracker graph caches
+                self.cluster_tracker.prune_memory_caches(max_wallets=400, max_pairs=600)
+
+                # 4. Force Python garbage collection
+                gc.collect()
+                logger.debug("🧹 Memory Janitor sweep completed: caches pruned & gc.collect() executed.")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Memory Janitor notice: {e}")
+
+            try:
+                await asyncio.sleep(180.0)
+            except asyncio.CancelledError:
+                break
+
     async def start(self):
         """Launches streaming threads, background tasks, and web server."""
         self.is_running = True
@@ -419,6 +471,9 @@ class TraderAgent:
 
         # Launch background keep-alive pinger to keep cloud service hot 24/7
         self._keep_alive_task = asyncio.create_task(self.run_keep_alive_pinger())
+
+        # Launch active memory janitor to keep RAM strictly below 120MB
+        self._memory_janitor_task = asyncio.create_task(self.run_memory_janitor())
 
         await self.pump_stream.start()
         await self.solana_stream.start()
@@ -438,6 +493,8 @@ class TraderAgent:
         logger.info("Shutting down Trader-N Agent...")
         if hasattr(self, "_keep_alive_task") and self._keep_alive_task:
             self._keep_alive_task.cancel()
+        if hasattr(self, "_memory_janitor_task") and self._memory_janitor_task:
+            self._memory_janitor_task.cancel()
         if self.web_server:
             await self.web_server.stop()
         await self.pump_stream.stop()

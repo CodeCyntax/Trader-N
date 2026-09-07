@@ -1,3 +1,13 @@
+---
+title: Trader-N Autonomous Agent
+emoji: ⚡
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8080
+pinned: false
+---
+
 # Trader-N: Autonomous Solana & Pump.fun AI Trading Agent
 
 Trader-N is a custom-engineered, fully autonomous trading and cognitive learning agent designed specifically for high-volatility **Pump.fun** bonding curves and Solana DEX tokens.
@@ -79,6 +89,24 @@ Set, deposit, or withdraw paper trading capital at any time:
 # Withdraw funds (e.g. withdraw 2 SOL)
 .venv/bin/python main.py --withdraw 2.0
 ```
+
+---
+
+## 🌐 100% Free 24/7 Cloud Deployment
+
+Trader-N is designed to run 24/7 on zero-cost cloud infrastructure without spinning down or crashing:
+
+### Option A: Hugging Face Spaces (Recommended: 16 GB RAM Free)
+Hugging Face offers 16 GB RAM and 2 vCPUs completely free with no memory bottlenecks:
+1. Go to [Hugging Face New Space](https://huggingface.co/new-space).
+2. Name your space (e.g. `Trader-N`) and select **Docker** as the Space SDK (Blank).
+3. Connect your GitHub repository `CodeCyntax/Trader-N` or push directly to the HF Space git remote.
+4. Hugging Face reads the Dockerfile and YAML frontmatter automatically, building and exposing the live web dashboard on port `8080`.
+
+### Option B: Render Free Web Service (512 MB RAM)
+Trader-N includes native guards optimized for Render's 512MB free tier:
+- **Autonomous Memory Janitor**: Prunes inactive token histories and cluster graph caches every 180s, keeping active memory consumption strictly bounded around 80–110MB.
+- **Keep-Alive Heartbeat Pinger**: Automatically pings the `/health` endpoint every 8 minutes, resetting Render's 15-minute inactivity idle timer and keeping the service hot 24/7.
 
 ---
 

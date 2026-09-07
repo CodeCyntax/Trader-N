@@ -44,8 +44,8 @@ class ClusterTracker:
         try:
             persisted = self.db.get_all_clusters(limit=200)
             for c in persisted:
-                # Discard legacy corrupted giant percolation clusters (> 20 members)
-                if len(c.member_addresses) > 20:
+                # Discard legacy corrupted giant percolation clusters (> 8 members)
+                if len(c.member_addresses) > 8:
                     continue
                 self.clusters[c.cluster_id] = c
                 for addr in c.member_addresses:
@@ -137,14 +137,14 @@ class ClusterTracker:
         if cluster_id_a and cluster_id_a in self.clusters:
             target_cluster = self.clusters[cluster_id_a]
             if wallet_b not in target_cluster.member_addresses:
-                # Cap cluster size at 20 wallets to prevent infinite percolation
-                if len(target_cluster.member_addresses) < 20:
+                # Cap cluster size at 8 wallets to reflect real Jito bundle limits and prevent percolation
+                if len(target_cluster.member_addresses) < 8:
                     target_cluster.member_addresses.append(wallet_b)
                     self.wallet_to_cluster[wallet_b] = cluster_id_a
         elif cluster_id_b and cluster_id_b in self.clusters:
             target_cluster = self.clusters[cluster_id_b]
             if wallet_a not in target_cluster.member_addresses:
-                if len(target_cluster.member_addresses) < 20:
+                if len(target_cluster.member_addresses) < 8:
                     target_cluster.member_addresses.append(wallet_a)
                     self.wallet_to_cluster[wallet_a] = cluster_id_b
         else:
@@ -183,15 +183,15 @@ class ClusterTracker:
         prob = min(0.99, base_prob + co_boost + sync_boost + jaccard_boost + dev_penalty)
         target_cluster.coordination_probability = round(prob, 3)
 
-        # Determine Archetype: Real insider cabals are small syndicates (<= 20 wallets)
+        # Determine Archetype: Real insider cabals are small syndicates (<= 8 wallets)
         if dev_wallet and (wallet_a == dev_wallet or wallet_b == dev_wallet):
             target_cluster.archetype = ClusterArchetype.DEPLOYER_SYBIL
-        elif len(target_cluster.member_addresses) <= 20 and (
+        elif len(target_cluster.member_addresses) <= 8 and (
             (target_cluster.total_co_trades >= 3 and target_cluster.avg_entry_delta_seconds <= 1.5)
             or target_cluster.coordination_probability >= 0.70
         ):
             target_cluster.archetype = ClusterArchetype.INSIDER_CABAL
-        elif len(target_cluster.member_addresses) > 20:
+        elif len(target_cluster.member_addresses) > 8:
             target_cluster.archetype = ClusterArchetype.COPY_RETAIL
         elif target_cluster.jaccard_token_overlap > 0.50:
             target_cluster.archetype = ClusterArchetype.COPY_RETAIL
@@ -267,7 +267,7 @@ class ClusterTracker:
     def get_cluster_summary(self) -> Dict[str, Any]:
         cabal_count = sum(
             1 for c in self.clusters.values()
-            if c.archetype == ClusterArchetype.INSIDER_CABAL and len(c.member_addresses) <= 20
+            if c.archetype == ClusterArchetype.INSIDER_CABAL and len(c.member_addresses) <= 8
         )
         return {
             "total_clusters_discovered": len(self.clusters),
@@ -275,6 +275,72 @@ class ClusterTracker:
             "deployer_clusters_count": sum(1 for c in self.clusters.values() if c.archetype == ClusterArchetype.DEPLOYER_SYBIL),
             "drift_suppressed_wallets": len(self.drift_suppressed_wallets),
         }
+
+    def prune_memory_caches(self, max_wallets: int = 400, max_pairs: int = 600):
+        """
+        Prunes in-memory tracking caches to prevent unbounded RAM growth.
+        Ensures cluster graph and wallet histories remain strictly bounded.
+        """
+        now = time.time()
+        # 1. Prune expired drift suppressions
+        expired_drifts = [w for w, exp in self.drift_suppressed_wallets.items() if now >= exp]
+        for w in expired_drifts:
+            self.drift_suppressed_wallets.pop(w, None)
+
+        # 2. Prune recent_mint_buys older than 300s or empty
+        cutoff = now - 300.0
+        mints_to_delete = []
+        for mint, buys in list(self.recent_mint_buys.items()):
+            valid_buys = [b for b in buys if b[0] >= cutoff]
+            if not valid_buys:
+                mints_to_delete.append(mint)
+            else:
+                self.recent_mint_buys[mint] = valid_buys
+        for m in mints_to_delete:
+            self.recent_mint_buys.pop(m, None)
+
+        if len(self.recent_mint_buys) > 150:
+            sorted_mints = sorted(
+                self.recent_mint_buys.items(),
+                key=lambda x: max((b[0] for b in x[1]), default=0.0),
+                reverse=True,
+            )
+            self.recent_mint_buys = dict(sorted_mints[:150])
+
+        # 3. Prune wallet_trade_history
+        if len(self.wallet_trade_history) > max_wallets:
+            sorted_hist = sorted(
+                self.wallet_trade_history.items(),
+                key=lambda x: x[1][-1]["timestamp"] if x[1] else 0.0,
+                reverse=True,
+            )
+            self.wallet_trade_history = dict(sorted_hist[:max_wallets])
+
+        # 4. Prune wallet_tokens
+        if len(self.wallet_tokens) > max_wallets:
+            active_set = set(self.wallet_trade_history.keys())
+            kept_tokens = {}
+            for w in active_set:
+                if w in self.wallet_tokens:
+                    kept_tokens[w] = self.wallet_tokens[w]
+            if len(kept_tokens) < max_wallets:
+                remainder = [
+                    (w, toks) for w, toks in self.wallet_tokens.items()
+                    if w not in kept_tokens
+                ]
+                remainder.sort(key=lambda x: len(x[1]), reverse=True)
+                for w, toks in remainder[: (max_wallets - len(kept_tokens))]:
+                    kept_tokens[w] = toks
+            self.wallet_tokens = kept_tokens
+
+        # 5. Prune pairwise_co_mints
+        if len(self.pairwise_co_mints) > max_pairs:
+            sorted_pairs = sorted(
+                self.pairwise_co_mints.items(),
+                key=lambda x: len(x[1]),
+                reverse=True,
+            )
+            self.pairwise_co_mints = dict(sorted_pairs[:max_pairs])
 
     def reset(self):
         self.recent_mint_buys.clear()

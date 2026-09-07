@@ -180,10 +180,10 @@ class TestClusterTracker(unittest.TestCase):
         self.assertIsNone(self.tracker.get_cluster(w2))
 
     def test_cluster_size_cap_and_archetype(self):
-        """Clusters with > 20 members are capped and classified as COPY_RETAIL, not INSIDER_CABAL."""
+        """Clusters with > 8 members are capped and classified as COPY_RETAIL, not INSIDER_CABAL."""
         now = time.time()
         cid = "cluster_large_swarm_test"
-        members = [f"WalletMember_{i:04d}111111111111111111111" for i in range(25)]
+        members = [f"WalletMember_{i:04d}111111111111111111111" for i in range(12)]
         cluster = ClusterHypothesis(
             cluster_id=cid,
             member_addresses=members,
@@ -196,8 +196,27 @@ class TestClusterTracker(unittest.TestCase):
             self.tracker.wallet_to_cluster[m] = cid
 
         summary = self.tracker.get_cluster_summary()
-        # Should NOT count as cabal because size > 20
+        # Should NOT count as cabal because size > 8
         self.assertEqual(summary["cabal_clusters_count"], 0)
+
+    def test_prune_memory_caches(self):
+        """Memory cache pruning maintains strictly bounded dictionary sizes."""
+        now = time.time()
+        # Seed 500 fake wallets in wallet_trade_history and tokens
+        for i in range(500):
+            w = f"Wallet_Prune_{i:04d}11111111111111111111"
+            self.tracker.wallet_trade_history[w] = [{"curve_pct": 10.0, "size_sol": 1.0, "timestamp": now + i}]
+            self.tracker.wallet_tokens[w] = {f"mint_{i}"}
+
+        # Seed 700 pairwise co-mints
+        for i in range(700):
+            pair = (f"wA_{i}", f"wB_{i}")
+            self.tracker.pairwise_co_mints[pair] = {f"mint_{i}"}
+
+        self.tracker.prune_memory_caches(max_wallets=400, max_pairs=600)
+        self.assertLessEqual(len(self.tracker.wallet_trade_history), 400)
+        self.assertLessEqual(len(self.tracker.wallet_tokens), 400)
+        self.assertLessEqual(len(self.tracker.pairwise_co_mints), 600)
 
 
 if __name__ == "__main__":

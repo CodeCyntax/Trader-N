@@ -23,9 +23,9 @@ class RegimeBrain(BaseBrain):
 
     def record_market_trade(self, ts: float):
         self.market_trade_timestamps.append(ts)
-        cutoff = ts - 300.0
-        if len(self.market_trade_timestamps) > 500:
-            self.market_trade_timestamps = [t for t in self.market_trade_timestamps if t >= cutoff]
+        if len(self.market_trade_timestamps) > 1000:
+            cutoff = ts - 300.0
+            self.market_trade_timestamps = [t for t in self.market_trade_timestamps if t >= cutoff][-1000:]
 
     def evaluate(
         self,

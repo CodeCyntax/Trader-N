@@ -58,8 +58,8 @@ class AdversaryBrain(BaseBrain):
                     metrics={"trap_type": "DEPLOYER_SYBIL"},
                 )
             if cluster.archetype == ClusterArchetype.INSIDER_CABAL and cluster.coordination_probability >= 0.85:
-                # True insider cabals are small syndicates (<= 20 wallets)
-                if len(cluster.member_addresses) <= 20:
+                # True insider cabals are small syndicates (<= 8 wallets per Jito bundle limit)
+                if len(cluster.member_addresses) <= 8:
                     return BrainVote(
                         brain_name=self.name,
                         score=0.10,
@@ -69,7 +69,7 @@ class AdversaryBrain(BaseBrain):
                         metrics={"trap_type": "INSIDER_CABAL"},
                     )
                 else:
-                    # Broad retail or market swarm (> 20 members), not an insider cabal
+                    # Broad retail or market swarm (> 8 members), not an insider cabal
                     return BrainVote(
                         brain_name=self.name,
                         score=0.50,

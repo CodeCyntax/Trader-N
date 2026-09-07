@@ -115,6 +115,25 @@ class TokenMonitor:
 
         return True, "ELIGIBLE"
 
+    def prune_stale_activities(self, cutoff_seconds: float = 900.0, max_activities: int = 150):
+        """Evicts inactive tokens to keep memory footprint bounded and lightweight."""
+        now = time.time()
+        cutoff = now - cutoff_seconds
+        stale_mints = [
+            mint for mint, act in self.activities.items()
+            if (act.last_trade_time and act.last_trade_time < cutoff) or ((now - act.first_seen) > cutoff_seconds and act.total_trades == 0)
+        ]
+        for m in stale_mints:
+            self.activities.pop(m, None)
+
+        if len(self.activities) > max_activities:
+            sorted_items = sorted(
+                self.activities.items(),
+                key=lambda x: x[1].last_trade_time or 0.0,
+                reverse=True
+            )
+            self.activities = dict(sorted_items[:max_activities])
+
     def reset(self):
         """Clears all in-memory rolling token activity windows."""
         self.activities.clear()

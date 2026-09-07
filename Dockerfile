@@ -20,8 +20,8 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 # Copy application source code
 COPY . .
 
-# Ensure data storage directory exists for persistent SQLite database
-RUN mkdir -p /app/data_store
+# Ensure data storage directory exists and has full permissions for any cloud runtime user
+RUN mkdir -p /app/data_store && chmod -R 777 /app /app/data_store
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
