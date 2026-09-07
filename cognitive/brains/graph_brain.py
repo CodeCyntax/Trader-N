@@ -43,9 +43,14 @@ class GraphBrain(BaseBrain):
                 conf = 0.90
                 evidence = f"Deployer sybil cluster detected (Coordination P={coord_prob:.2f}). Direct insider link."
             elif arch == ClusterArchetype.INSIDER_CABAL:
-                score = 0.15
-                conf = 0.85
-                evidence = f"Insider cabal bundle detected ({len(cluster.member_addresses)} wallets, sync={cluster.avg_entry_delta_seconds:.1f}s). High dump risk."
+                if len(cluster.member_addresses) <= 20:
+                    score = 0.15
+                    conf = 0.85
+                    evidence = f"Insider cabal bundle detected ({len(cluster.member_addresses)} wallets, sync={cluster.avg_entry_delta_seconds:.1f}s). High dump risk."
+                else:
+                    score = 0.45
+                    conf = 0.60
+                    evidence = f"Broad participant cluster ({len(cluster.member_addresses)} wallets). Mild caution."
             elif arch == ClusterArchetype.COPY_RETAIL:
                 score = 0.35
                 conf = 0.70

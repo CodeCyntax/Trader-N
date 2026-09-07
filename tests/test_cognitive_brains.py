@@ -68,6 +68,27 @@ class TestCognitiveBrains(unittest.TestCase):
         self.assertTrue(vote.veto)
         self.assertIn("insider cabal", vote.key_evidence.lower())
 
+    def test_adversary_brain_no_veto_on_large_swarm(self):
+        """AdversaryBrain does NOT veto when cluster has > 20 members (broad retail swarm)."""
+        brain = AdversaryBrain(self.tracker)
+        cid = "cluster_swarm_test"
+        # 25 members
+        members = [self.trade.trader_public_key] + [f"SwarmMember_{i}" for i in range(24)]
+        self.tracker.clusters[cid] = ClusterHypothesis(
+            cluster_id=cid,
+            member_addresses=members,
+            archetype=ClusterArchetype.INSIDER_CABAL,
+            coordination_probability=0.90,
+            avg_entry_delta_seconds=0.5,
+            total_co_trades=10,
+        )
+        self.tracker.wallet_to_cluster[self.trade.trader_public_key] = cid
+
+        context = {"dev_dumped": False, "is_burner": False, "dev_holding_pct": 0.01}
+        vote = brain.evaluate(self.trade.mint, self.trade, self.curve, context)
+        self.assertFalse(vote.veto)
+        self.assertIn("swarm", vote.key_evidence.lower())
+
     def test_flow_brain_evaluates_microstructure(self):
         """FlowBrain scores high on accelerating net buy volume and distinct buyers."""
         brain = FlowBrain()

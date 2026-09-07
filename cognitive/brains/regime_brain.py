@@ -49,10 +49,10 @@ class RegimeBrain(BaseBrain):
             score = 0.25
             hurdle = 0.15  # High hurdle: cash is active alpha
             evidence = f"Low market liquidity ({recent_market_trades} trades in 5m). Conservative cash posture."
-        elif cabal_count >= 5:
+        elif cabal_count >= 10:
             regime = "CABAL_PREDATORY"
             score = 0.40
-            hurdle = 0.10  # Elevated hurdle: require exceptional evidence
+            hurdle = 0.08  # Elevated hurdle: require clear edge
             evidence = f"Predatory cabal climate ({cabal_count} active sybil clusters). Elevated skepticism."
         else:
             regime = "ORGANIC_MOMENTUM"

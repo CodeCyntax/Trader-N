@@ -266,6 +266,12 @@ class DatabaseManager:
             if "moonbag_milestones_json" not in pos_cols:
                 cursor.execute("ALTER TABLE paper_positions ADD COLUMN moonbag_milestones_json TEXT DEFAULT '[]';")
 
+            # Purge legacy corrupted giant percolation clusters (> 20 members)
+            try:
+                cursor.execute("DELETE FROM wallet_clusters WHERE length(member_addresses_json) > 1000;")
+            except Exception:
+                pass
+
             conn.commit()
 
     # --- Portfolio Balance & Capital Operations ---
@@ -733,6 +739,23 @@ class DatabaseManager:
                 updated_at=float(row["updated_at"]),
             )
 
+    def purge_corrupted_clusters(self):
+        """Purges any legacy percolation clusters with > 20 member addresses."""
+        with self.get_connection() as conn:
+            rows = conn.execute("SELECT cluster_id, member_addresses_json FROM wallet_clusters;").fetchall()
+            to_delete = []
+            for r in rows:
+                try:
+                    m = json.loads(r["member_addresses_json"])
+                    if len(m) > 20:
+                        to_delete.append(r["cluster_id"])
+                except Exception:
+                    to_delete.append(r["cluster_id"])
+            if to_delete:
+                placeholders = ",".join("?" for _ in to_delete)
+                conn.execute(f"DELETE FROM wallet_clusters WHERE cluster_id IN ({placeholders});", to_delete)
+                conn.commit()
+
     def get_all_clusters(self, limit: int = 50) -> List[ClusterHypothesis]:
         with self.get_connection() as conn:
             rows = conn.execute(
@@ -741,18 +764,24 @@ class DatabaseManager:
             ).fetchall()
             clusters = []
             for row in rows:
-                clusters.append(ClusterHypothesis(
-                    cluster_id=row["cluster_id"],
-                    archetype=row["archetype"],
-                    coordination_probability=float(row["coordination_probability"]),
-                    member_addresses=json.loads(row["member_addresses_json"]),
-                    common_ancestor=row["common_ancestor"],
-                    total_co_trades=int(row["total_co_trades"]),
-                    avg_entry_delta_seconds=float(row["avg_entry_delta_seconds"]),
-                    jaccard_token_overlap=float(row["jaccard_token_overlap"]),
-                    created_at=float(row["created_at"]),
-                    updated_at=float(row["updated_at"]),
-                ))
+                try:
+                    members = json.loads(row["member_addresses_json"])
+                    if len(members) > 20:
+                        continue
+                    clusters.append(ClusterHypothesis(
+                        cluster_id=row["cluster_id"],
+                        archetype=row["archetype"],
+                        coordination_probability=float(row["coordination_probability"]),
+                        member_addresses=members,
+                        common_ancestor=row["common_ancestor"],
+                        total_co_trades=int(row["total_co_trades"]),
+                        avg_entry_delta_seconds=float(row["avg_entry_delta_seconds"]),
+                        jaccard_token_overlap=float(row["jaccard_token_overlap"]),
+                        created_at=float(row["created_at"]),
+                        updated_at=float(row["updated_at"]),
+                    ))
+                except Exception:
+                    continue
             return clusters
 
     def find_cluster_for_wallet(self, address: str) -> Optional[ClusterHypothesis]:

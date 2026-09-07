@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from memory.database import DatabaseManager
 from cognitive.cluster_tracker import ClusterTracker
-from core.models import TradeEvent, TradeType, ClusterArchetype
+from core.models import TradeEvent, TradeType, ClusterArchetype, ClusterHypothesis
 
 
 class TestClusterTracker(unittest.TestCase):
@@ -144,6 +144,60 @@ class TestClusterTracker(unittest.TestCase):
         self.assertTrue(is_drifting)
         self.assertGreaterEqual(d_kl, 1.25)
         self.assertIn(w, self.tracker.drift_suppressed_wallets)
+
+    def test_single_token_synchrony_does_not_cluster_strangers(self):
+        """Two strangers buying the same token once within 1.0s should NOT be clustered."""
+        now = time.time()
+        w1 = "WalletStrangerA111111111111111111111111"
+        w2 = "WalletStrangerB222222222222222222222222"
+        mint = "SingleTokenLaunch111111111111111111111"
+
+        t1 = TradeEvent(
+            signature="sig_s1",
+            mint=mint,
+            trader_public_key=w1,
+            tx_type=TradeType.BUY,
+            sol_amount=1.0,
+            token_amount=10000.0,
+            timestamp=now,
+            bonding_curve_pct=10.0,
+        )
+        t2 = TradeEvent(
+            signature="sig_s2",
+            mint=mint,
+            trader_public_key=w2,
+            tx_type=TradeType.BUY,
+            sol_amount=1.0,
+            token_amount=10000.0,
+            timestamp=now + 0.5,
+            bonding_curve_pct=11.0,
+        )
+        self.tracker.record_trade(t1)
+        self.tracker.record_trade(t2)
+
+        # Neither wallet should be in a cluster after only 1 co-entry
+        self.assertIsNone(self.tracker.get_cluster(w1))
+        self.assertIsNone(self.tracker.get_cluster(w2))
+
+    def test_cluster_size_cap_and_archetype(self):
+        """Clusters with > 20 members are capped and classified as COPY_RETAIL, not INSIDER_CABAL."""
+        now = time.time()
+        cid = "cluster_large_swarm_test"
+        members = [f"WalletMember_{i:04d}111111111111111111111" for i in range(25)]
+        cluster = ClusterHypothesis(
+            cluster_id=cid,
+            member_addresses=members,
+            archetype=ClusterArchetype.COPY_RETAIL,
+            coordination_probability=0.90,
+            total_co_trades=10,
+        )
+        self.tracker.clusters[cid] = cluster
+        for m in members:
+            self.tracker.wallet_to_cluster[m] = cid
+
+        summary = self.tracker.get_cluster_summary()
+        # Should NOT count as cabal because size > 20
+        self.assertEqual(summary["cabal_clusters_count"], 0)
 
 
 if __name__ == "__main__":

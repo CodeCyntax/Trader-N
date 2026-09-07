@@ -28,6 +28,8 @@ class ClusterTracker:
         self.wallet_tokens: Dict[str, Set[str]] = {}
         # wallet -> list of past trades: [{"curve_pct": float, "size_sol": float, "timestamp": float}]
         self.wallet_trade_history: Dict[str, List[Dict[str, float]]] = {}
+        # Pairwise multi-token co-entry tracker: (wallet_a, wallet_b) -> set of mints co-traded <= 2.5s
+        self.pairwise_co_mints: Dict[Tuple[str, str], Set[str]] = {}
         # cluster_id -> ClusterHypothesis
         self.clusters: Dict[str, ClusterHypothesis] = {}
         # wallet_address -> cluster_id
@@ -40,8 +42,11 @@ class ClusterTracker:
 
     def _load_clusters_from_db(self):
         try:
-            persisted = self.db.get_all_clusters(limit=100)
+            persisted = self.db.get_all_clusters(limit=200)
             for c in persisted:
+                # Discard legacy corrupted giant percolation clusters (> 20 members)
+                if len(c.member_addresses) > 20:
+                    continue
                 self.clusters[c.cluster_id] = c
                 for addr in c.member_addresses:
                     self.wallet_to_cluster[addr] = c.cluster_id
@@ -81,14 +86,32 @@ class ClusterTracker:
         cutoff = ts - 300.0
         self.recent_mint_buys[mint] = [b for b in self.recent_mint_buys[mint] if b[0] >= cutoff]
 
-        # Detect temporal co-entry with other wallets within 2.0 seconds
+        # Detect temporal co-entry with other wallets within 2.5 seconds
         for prev_ts, prev_buyer, prev_size in self.recent_mint_buys[mint]:
             if prev_buyer == buyer:
                 continue
 
             delta_t = abs(ts - prev_ts)
             if delta_t <= 2.5:  # Coordinated entry within 2.5s
-                self._record_coordination(buyer, prev_buyer, delta_t, dev_wallet)
+                pair_key = tuple(sorted([buyer, prev_buyer]))
+                if pair_key not in self.pairwise_co_mints:
+                    self.pairwise_co_mints[pair_key] = set()
+                self.pairwise_co_mints[pair_key].add(mint)
+
+                # Gating condition to prevent percolation snowball:
+                # Wallets are ONLY clustered if:
+                # 1. Directly linked to the dev_wallet (deployer sybil), OR
+                # 2. They have co-entered within 2.5s across at least 2 distinct tokens, OR
+                # 3. They have high Jaccard token overlap (>= 0.35) with at least 2 common tokens
+                is_dev_link = dev_wallet and (buyer == dev_wallet or prev_buyer == dev_wallet)
+                tokens_a = self.wallet_tokens.get(buyer, set())
+                tokens_b = self.wallet_tokens.get(prev_buyer, set())
+                shared_tokens = len(tokens_a.intersection(tokens_b))
+                is_repeat_synchrony = len(self.pairwise_co_mints[pair_key]) >= 2
+                is_high_jaccard = (shared_tokens >= 2) and (shared_tokens / max(1, len(tokens_a.union(tokens_b))) >= 0.35)
+
+                if is_dev_link or is_repeat_synchrony or is_high_jaccard:
+                    self._record_coordination(buyer, prev_buyer, delta_t, dev_wallet)
 
         self.recent_mint_buys[mint].append((ts, buyer, trade.sol_amount))
 
@@ -99,7 +122,7 @@ class ClusterTracker:
         delta_t: float,
         dev_wallet: Optional[str] = None
     ):
-        """Merges or creates a cluster between wallet_a and wallet_b."""
+        """Merges or creates a cluster between wallet_a and wallet_b with percolation safeguards."""
         cluster_id_a = self.wallet_to_cluster.get(wallet_a)
         cluster_id_b = self.wallet_to_cluster.get(wallet_b)
 
@@ -114,13 +137,16 @@ class ClusterTracker:
         if cluster_id_a and cluster_id_a in self.clusters:
             target_cluster = self.clusters[cluster_id_a]
             if wallet_b not in target_cluster.member_addresses:
-                target_cluster.member_addresses.append(wallet_b)
-                self.wallet_to_cluster[wallet_b] = cluster_id_a
+                # Cap cluster size at 20 wallets to prevent infinite percolation
+                if len(target_cluster.member_addresses) < 20:
+                    target_cluster.member_addresses.append(wallet_b)
+                    self.wallet_to_cluster[wallet_b] = cluster_id_a
         elif cluster_id_b and cluster_id_b in self.clusters:
             target_cluster = self.clusters[cluster_id_b]
             if wallet_a not in target_cluster.member_addresses:
-                target_cluster.member_addresses.append(wallet_a)
-                self.wallet_to_cluster[wallet_a] = cluster_id_b
+                if len(target_cluster.member_addresses) < 20:
+                    target_cluster.member_addresses.append(wallet_a)
+                    self.wallet_to_cluster[wallet_a] = cluster_id_b
         else:
             # Create new cluster
             cid = f"cluster_{wallet_a[:4]}_{wallet_b[:4]}_{int(time.time())}"
@@ -133,6 +159,9 @@ class ClusterTracker:
             self.clusters[cid] = target_cluster
             self.wallet_to_cluster[wallet_a] = cid
             self.wallet_to_cluster[wallet_b] = cid
+
+        if not target_cluster:
+            return
 
         # Update metrics
         target_cluster.total_co_trades += 1
@@ -154,13 +183,16 @@ class ClusterTracker:
         prob = min(0.99, base_prob + co_boost + sync_boost + jaccard_boost + dev_penalty)
         target_cluster.coordination_probability = round(prob, 3)
 
-        # Determine Archetype
+        # Determine Archetype: Real insider cabals are small syndicates (<= 20 wallets)
         if dev_wallet and (wallet_a == dev_wallet or wallet_b == dev_wallet):
             target_cluster.archetype = ClusterArchetype.DEPLOYER_SYBIL
-        elif target_cluster.total_co_trades >= 3 and target_cluster.avg_entry_delta_seconds <= 1.5:
+        elif len(target_cluster.member_addresses) <= 20 and (
+            (target_cluster.total_co_trades >= 3 and target_cluster.avg_entry_delta_seconds <= 1.5)
+            or target_cluster.coordination_probability >= 0.70
+        ):
             target_cluster.archetype = ClusterArchetype.INSIDER_CABAL
-        elif target_cluster.coordination_probability >= 0.70:
-            target_cluster.archetype = ClusterArchetype.INSIDER_CABAL
+        elif len(target_cluster.member_addresses) > 20:
+            target_cluster.archetype = ClusterArchetype.COPY_RETAIL
         elif target_cluster.jaccard_token_overlap > 0.50:
             target_cluster.archetype = ClusterArchetype.COPY_RETAIL
         else:
@@ -233,9 +265,13 @@ class ClusterTracker:
         return None
 
     def get_cluster_summary(self) -> Dict[str, Any]:
+        cabal_count = sum(
+            1 for c in self.clusters.values()
+            if c.archetype == ClusterArchetype.INSIDER_CABAL and len(c.member_addresses) <= 20
+        )
         return {
             "total_clusters_discovered": len(self.clusters),
-            "cabal_clusters_count": sum(1 for c in self.clusters.values() if c.archetype == ClusterArchetype.INSIDER_CABAL),
+            "cabal_clusters_count": cabal_count,
             "deployer_clusters_count": sum(1 for c in self.clusters.values() if c.archetype == ClusterArchetype.DEPLOYER_SYBIL),
             "drift_suppressed_wallets": len(self.drift_suppressed_wallets),
         }
@@ -244,6 +280,7 @@ class ClusterTracker:
         self.recent_mint_buys.clear()
         self.wallet_tokens.clear()
         self.wallet_trade_history.clear()
+        self.pairwise_co_mints.clear()
         self.clusters.clear()
         self.wallet_to_cluster.clear()
         self.drift_suppressed_wallets.clear()

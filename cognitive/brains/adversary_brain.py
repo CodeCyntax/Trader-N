@@ -58,14 +58,26 @@ class AdversaryBrain(BaseBrain):
                     metrics={"trap_type": "DEPLOYER_SYBIL"},
                 )
             if cluster.archetype == ClusterArchetype.INSIDER_CABAL and cluster.coordination_probability >= 0.85:
-                return BrainVote(
-                    brain_name=self.name,
-                    score=0.10,
-                    confidence=0.90,
-                    key_evidence=f"HARD VETO: High-confidence insider cabal cluster ({len(cluster.member_addresses)} members, P={cluster.coordination_probability:.2f}).",
-                    veto=True,
-                    metrics={"trap_type": "INSIDER_CABAL"},
-                )
+                # True insider cabals are small syndicates (<= 20 wallets)
+                if len(cluster.member_addresses) <= 20:
+                    return BrainVote(
+                        brain_name=self.name,
+                        score=0.10,
+                        confidence=0.90,
+                        key_evidence=f"HARD VETO: High-confidence insider cabal cluster ({len(cluster.member_addresses)} members, P={cluster.coordination_probability:.2f}).",
+                        veto=True,
+                        metrics={"trap_type": "INSIDER_CABAL"},
+                    )
+                else:
+                    # Broad retail or market swarm (> 20 members), not an insider cabal
+                    return BrainVote(
+                        brain_name=self.name,
+                        score=0.50,
+                        confidence=0.60,
+                        key_evidence=f"Broad participant swarm ({len(cluster.member_addresses)} members). No cabal veto.",
+                        veto=False,
+                        metrics={"trap_type": "RETAIL_SWARM"},
+                    )
 
         # 3. Micro-Bait Copy-Bot Trap
         # Single micro trade (< 0.02 SOL) to trigger bots while dev holds > 12%
