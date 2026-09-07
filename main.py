@@ -10,7 +10,8 @@ import os
 import signal
 import sys
 import time
-from typing import Dict
+from typing import Dict, Optional
+import aiohttp
 
 from core.models import TokenMetadata, TradeEvent, TradeType
 from core.bonding_curve import PumpBondingCurve
@@ -370,6 +371,43 @@ class TraderAgent:
 
             print("\n" + self.reporter.render_summary() + "\n")
 
+    async def run_keep_alive_pinger(self):
+        """
+        Periodically pings the service's public HTTPS /health endpoint every 8 minutes (480s)
+        to prevent cloud platforms (e.g. Render free tier) from spinning down due to inactivity.
+        Because Render's inactivity threshold is 15 minutes, pinging every 8 minutes resets
+        the inactivity timer continuously, keeping the instance 100% hot 24/7.
+        """
+        external_url = (
+            os.getenv("RENDER_EXTERNAL_URL")
+            or os.getenv("KEEP_ALIVE_URL")
+            or "https://trader-n.onrender.com"
+        )
+        target_url = f"{external_url.rstrip('/')}/health"
+        logger.info(f"Autonomous keep-alive pinger active. Target: {target_url} (interval: 480s)")
+
+        # Initial delay before starting pings
+        await asyncio.sleep(45.0)
+
+        while self.is_running:
+            try:
+                timeout = aiohttp.ClientTimeout(total=15.0)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(target_url) as resp:
+                        if resp.status == 200:
+                            logger.info(f"Keep-alive heartbeat registered at {target_url} (status: 200 OK)")
+                        else:
+                            logger.warning(f"Keep-alive ping returned status {resp.status}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Keep-alive ping notice: {e}")
+
+            try:
+                await asyncio.sleep(480.0)
+            except asyncio.CancelledError:
+                break
+
     async def start(self):
         """Launches streaming threads, background tasks, and web server."""
         self.is_running = True
@@ -378,6 +416,9 @@ class TraderAgent:
 
         if self.web_server:
             await self.web_server.start()
+
+        # Launch background keep-alive pinger to keep cloud service hot 24/7
+        self._keep_alive_task = asyncio.create_task(self.run_keep_alive_pinger())
 
         await self.pump_stream.start()
         await self.solana_stream.start()
@@ -395,6 +436,8 @@ class TraderAgent:
         """Clean shutdown."""
         self.is_running = False
         logger.info("Shutting down Trader-N Agent...")
+        if hasattr(self, "_keep_alive_task") and self._keep_alive_task:
+            self._keep_alive_task.cancel()
         if self.web_server:
             await self.web_server.stop()
         await self.pump_stream.stop()

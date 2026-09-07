@@ -1,0 +1,28 @@
+name: 24/7 Cloud Service Keep-Alive Watchdog
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent Render free-tier idle spin-down
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keep_alive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Trader-N /health
+        run: |
+          echo "Pinging Trader-N Cloud Service..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" --max-time 45 https://trader-n.onrender.com/health)
+          HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          echo "Response Body: $HTTP_BODY"
+          echo "HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "SUCCESS: Trader-N is online, responsive, and hot!"
+          else
+            echo "Service may be waking from cold start (status $HTTP_STATUS). Retrying in 20s..."
+            sleep 20
+            curl -s -f --max-time 45 https://trader-n.onrender.com/health || true
+          fi
