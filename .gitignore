@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Sensitive Environment variables & secrets
+.env
+*.env.local
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+data_store/*.db
+data_store/*.db-shm
+data_store/*.db-wal
+data_store/debug.db*
+data_store/test_*.db*
+
+# Logs & temp files
+*.log
+/tmp/
+.DS_Store
+bin/cloudflared
+scratch/
+scratch_payload.json

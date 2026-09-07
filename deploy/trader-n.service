@@ -1,0 +1,26 @@
+[Unit]
+Description=Trader-N Autonomous Solana Trading Agent & Cognitive Organism
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%I
+WorkingDirectory=/home/%I/Trader-N
+EnvironmentFile=-/home/%I/Trader-N/.env
+ExecStart=/home/%I/Trader-N/.venv/bin/python main.py --port 8080
+Restart=always
+RestartSec=5s
+
+# Security & Process Resource Limits
+LimitNOFILE=65535
+TimeoutStopSec=20
+KillMode=mixed
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trader-n
+
+[Install]
+WantedBy=multi-user.target

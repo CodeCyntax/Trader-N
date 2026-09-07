@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  trader-n:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trader-n-agent
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Private Authentication (Change these before deploying to production!)
+      - TRADER_AUTH_ENABLED=true
+      - TRADER_AUTH_USER=${TRADER_AUTH_USER:-admin}
+      - TRADER_AUTH_PASS=${TRADER_AUTH_PASS:-trader_secure_password_2026}
+    volumes:
+      # Mount local data_store so SQLite database, wallet graphs, and learnings persist
+      - ./data_store:/app/data_store
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

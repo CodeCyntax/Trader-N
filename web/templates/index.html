@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trader-N | Autonomous Solana AI Trading Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#07090e',
+                            800: '#0d111a',
+                            700: '#151b28',
+                            600: '#1f2738',
+                        },
+                        accent: {
+                            cyan: '#06b6d4',
+                            emerald: '#10b981',
+                            rose: '#f43f5e',
+                            purple: '#8b5cf6',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+        body {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .glow-emerald {
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+        }
+        .glow-rose {
+            box-shadow: 0 0 15px rgba(244, 63, 94, 0.2);
+        }
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+        }
+        .glow-purple {
+            box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+        }
+        /* Custom sleek dark scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #07090e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2738;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #374151;
+        }
+        /* Completely hide scrollbars where requested */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-dark-900 text-gray-200 min-h-screen flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="border-b border-dark-600 bg-dark-800/80 backdrop-blur sticky top-0 z-40 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-accent-cyan via-accent-purple to-accent-emerald flex items-center justify-center font-bold text-black text-lg">
+                N
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <span class="font-bold text-lg text-white tracking-wide">TRADER-N</span>
+                    <span class="px-2 py-0.5 rounded text-xs bg-dark-700 text-accent-cyan font-medium border border-dark-600">PUMP.FUN AGENT</span>
+                </div>
+                <div class="flex items-center space-x-2 text-xs text-gray-400">
+                    <span class="inline-block w-2 h-2 rounded-full bg-accent-emerald animate-ping"></span>
+                    <span id="wsStatusText" class="text-emerald-400 font-medium">SOLANA MAINNET CONNECTED</span>
+                    <span class="text-gray-600">|</span>
+                    <span id="activeModeText" class="text-gray-300">PAPER EXECUTION (REAL CURVE MATH)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Portfolio Controls & Balance Badge -->
+        <div class="flex items-center space-x-3">
+            <div class="bg-dark-700 border border-dark-600 px-3.5 py-1.5 rounded-lg flex items-center space-x-2">
+                <span class="text-xs text-gray-400 font-medium">CASH:</span>
+                <span id="navCashBalance" class="text-white font-bold text-sm">-- SOL</span>
+            </div>
+            
+            <button onclick="openModal('depositModal')" class="bg-accent-emerald/10 hover:bg-accent-emerald/20 text-accent-emerald border border-accent-emerald/30 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                <span>Deposit</span>
+            </button>
+
+            <button onclick="openModal('withdrawModal')" class="bg-accent-rose/10 hover:bg-accent-rose/20 text-accent-rose border border-accent-rose/30 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+                <i data-lucide="minus-circle" class="w-3.5 h-3.5"></i>
+                <span>Withdraw</span>
+            </button>
+
+            <button onclick="openModal('resetBalanceModal')" class="bg-dark-700 hover:bg-dark-600 text-gray-300 border border-dark-600 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                <span>Reset</span>
+            </button>
+
+            <button id="toggleAgentBtn" onclick="toggleAgent()" class="bg-accent-cyan/10 hover:bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition">
+                <i id="toggleIcon" data-lucide="pause" class="w-3.5 h-3.5"></i>
+                <span id="toggleText">Pause</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+
+        <!-- KPI Metric Ribbon -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            <!-- 1. Total Equity -->
+            <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                <div class="text-xs text-gray-400 flex items-center justify-between">
+                    <span>TOTAL EQUITY</span>
+                    <i data-lucide="wallet" class="w-4 h-4 text-accent-cyan"></i>
+                </div>
+                <div id="statTotalEquity" class="text-xl font-bold text-white mt-1">-- SOL</div>
+                <div id="statEquitySub" class="text-xs text-gray-400 mt-0.5">Cash + Active Value</div>
+                <div class="absolute -right-2 -bottom-2 w-16 h-16 bg-accent-cyan/5 rounded-full blur-xl"></div>
+            </div>
+
+            <!-- 2. Realized PnL -->
+            <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                <div class="text-xs text-gray-400 flex items-center justify-between">
+                    <span>REALIZED PNL</span>
+                    <i data-lucide="trending-up" class="w-4 h-4 text-accent-emerald"></i>
+                </div>
+                <div id="statRealizedPnl" class="text-xl font-bold text-emerald-400 mt-1">+0.0000 SOL</div>
+                <div id="statWinRate" class="text-xs text-gray-400 mt-0.5">Win Rate: 0.0% (0/0)</div>
+                <div class="absolute -right-2 -bottom-2 w-16 h-16 bg-accent-emerald/5 rounded-full blur-xl"></div>
+            </div>
+
+            <!-- 3. Active Positions -->
+            <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                <div class="text-xs text-gray-400 flex items-center justify-between">
+                    <span>ACTIVE TRADES</span>
+                    <i data-lucide="activity" class="w-4 h-4 text-accent-purple"></i>
+                </div>
+                <div id="statOpenPositionsCount" class="text-xl font-bold text-white mt-1">0 Open</div>
+                <div id="statUnrealizedPnl" class="text-xs text-gray-400 mt-0.5">Unrealized: +0.000 SOL</div>
+                <div class="absolute -right-2 -bottom-2 w-16 h-16 bg-accent-purple/5 rounded-full blur-xl"></div>
+            </div>
+
+            <!-- 4. Smart Money Tracked -->
+            <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                <div class="text-xs text-gray-400 flex items-center justify-between">
+                    <span>PERSISTENT WALLETS</span>
+                    <i data-lucide="shield-check" class="w-4 h-4 text-accent-cyan"></i>
+                </div>
+                <div id="statPersistentWallets" class="text-xl font-bold text-white mt-1">0 Tracked</div>
+                <div id="statBurnersScreened" class="text-xs text-rose-400 mt-0.5">0 Burners Rejected</div>
+                <div class="absolute -right-2 -bottom-2 w-16 h-16 bg-accent-cyan/5 rounded-full blur-xl"></div>
+            </div>
+
+            <!-- 5. Market Regime & Dynamic Hurdle -->
+            <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                <div class="text-xs text-gray-400 flex items-center justify-between">
+                    <span>MARKET REGIME</span>
+                    <i data-lucide="compass" class="w-4 h-4 text-amber-400"></i>
+                </div>
+                <div id="statActiveRegime" class="text-base font-bold text-amber-400 mt-1 uppercase tracking-tight">ORGANIC MOMENTUM</div>
+                <div id="statHurdleRate" class="text-xs text-gray-400 mt-0.5">Hurdle: +5.0% Edge</div>
+                <div class="absolute -right-2 -bottom-2 w-16 h-16 bg-amber-400/5 rounded-full blur-xl"></div>
+            </div>
+
+            <!-- 6. Cognitive Research & Hypotheses -->
+            <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                <div class="text-xs text-gray-400 flex items-center justify-between">
+                    <span>RESEARCH ORGANISM</span>
+                    <i data-lucide="network" class="w-4 h-4 text-accent-cyan"></i>
+                </div>
+                <div id="statHypothesesMined" class="text-xl font-bold text-accent-cyan mt-1">6 Brains Live</div>
+                <div id="statCounterfactualsPreserved" class="text-xs text-emerald-400 mt-0.5">0 SOL Rugs Dodged</div>
+                <div class="absolute -right-2 -bottom-2 w-16 h-16 bg-accent-cyan/5 rounded-full blur-xl"></div>
+            </div>
+        </div>
+
+        <!-- Tab Bar Navigation -->
+        <div class="border-b border-dark-600 flex space-x-6 text-sm overflow-x-auto no-scrollbar">
+            <button onclick="switchTab('positionsTab')" id="tabBtn-positionsTab" class="tab-btn pb-3 font-semibold text-accent-cyan border-b-2 border-accent-cyan flex items-center space-x-2 whitespace-nowrap">
+                <i data-lucide="crosshair" class="w-4 h-4"></i>
+                <span>Active Positions & Live Ticker</span>
+            </button>
+            <button onclick="switchTab('cognitiveTab')" id="tabBtn-cognitiveTab" class="tab-btn pb-3 font-medium text-gray-400 hover:text-gray-200 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
+                <i data-lucide="network" class="w-4 h-4 text-accent-purple"></i>
+                <span>Cognitive Organism & Research Arena</span>
+            </button>
+            <button onclick="switchTab('walletsTab')" id="tabBtn-walletsTab" class="tab-btn pb-3 font-medium text-gray-400 hover:text-gray-200 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
+                <i data-lucide="users" class="w-4 h-4"></i>
+                <span>Smart Wallet & Sybil Dossier</span>
+            </button>
+            <button onclick="switchTab('learningTab')" id="tabBtn-learningTab" class="tab-btn pb-3 font-medium text-gray-400 hover:text-gray-200 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
+                <i data-lucide="brain" class="w-4 h-4"></i>
+                <span>Agent Deep Dive & Cognitive Brain</span>
+            </button>
+            <button onclick="switchTab('settingsTab')" id="tabBtn-settingsTab" class="tab-btn pb-3 font-medium text-gray-400 hover:text-gray-200 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
+                <i data-lucide="sliders" class="w-4 h-4"></i>
+                <span>Strategy Hyperparameters</span>
+            </button>
+            <button onclick="switchTab('analyticsTab')" id="tabBtn-analyticsTab" class="tab-btn pb-3 font-medium text-gray-400 hover:text-gray-200 border-b-2 border-transparent flex items-center space-x-2 whitespace-nowrap">
+                <i data-lucide="line-chart" class="w-4 h-4 text-accent-emerald"></i>
+                <span>Analytics & Long-Term Performance</span>
+            </button>
+        </div>
+
+        <!-- TAB 1: POSITIONS & LIVE TICKER -->
+        <section id="positionsTab" class="tab-content space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Open Positions Column -->
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                            <span>Open Paper Positions</span>
+                            <span id="posBadgeCount" class="bg-dark-700 text-xs px-2 py-0.5 rounded-full border border-dark-600 text-gray-300">0</span>
+                        </h2>
+                        <span class="text-xs text-gray-400">Autonomous dynamic exits active</span>
+                    </div>
+
+                    <div id="positionsContainer" class="space-y-3">
+                        <!-- Position cards rendered via JS -->
+                        <div class="bg-dark-800 border border-dark-600 rounded-xl p-8 text-center text-gray-500 text-sm">
+                            <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+                            No active positions. The agent is scanning the live Solana stream for high-persistence smart money entries...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Stream Feed Ticker -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                            <span>Live Trade Stream</span>
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        </h2>
+                        <span class="text-xs text-gray-400">Pump.fun Program Logs</span>
+                    </div>
+
+                    <div class="bg-dark-800 border border-dark-600 rounded-xl p-3 h-[480px] overflow-y-auto space-y-2 text-xs font-mono" id="tradeTicker">
+                        <div class="text-gray-500 text-center py-6">Connecting to real-time feed...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: SMART WALLET DOSSIER -->
+        <section id="walletsTab" class="tab-content hidden space-y-6">
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h2 class="text-base font-bold text-white">Top Persistent Smart Wallets (Anti-Burner Verified)</h2>
+                        <p class="text-xs text-gray-400 mt-0.5">Only wallets with multi-day activity span, &ge; 3 distinct tokens, and consistent net profit are scored and tracked.</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2.5 py-1 rounded bg-rose-500/10 text-rose-400 text-xs border border-rose-500/20 font-medium" id="burnerCountBadge">0 Burners Screened</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="border-b border-dark-600 text-gray-400 font-semibold uppercase">
+                                <th class="py-3 px-3">Rank & Wallet Address</th>
+                                <th class="py-3 px-3">Persistence Score</th>
+                                <th class="py-3 px-3">Closed / Total Trades</th>
+                                <th class="py-3 px-3">Tokens Traded</th>
+                                <th class="py-3 px-3">Win Rate % (Closed)</th>
+                                <th class="py-3 px-3">Realized PnL</th>
+                                <th class="py-3 px-3">Active Lifespan</th>
+                                <th class="py-3 px-3">Classification</th>
+                            </tr>
+                        </thead>
+                        <tbody id="walletsTableBody" class="divide-y divide-dark-600 text-gray-300">
+                            <tr>
+                                <td colspan="8" class="text-center py-8 text-gray-500">Profiling live on-chain traders...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: AGENT DEEP DIVE & COGNITIVE BRAIN -->
+        <section id="learningTab" class="tab-content hidden space-y-6">
+            <!-- Cognitive Knowledge & Evolution KPI Ribbon -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-dark-800 border border-dark-600 rounded-xl p-4 space-y-1">
+                    <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold block">Knowledge Acquired</span>
+                    <div class="flex items-baseline space-x-2">
+                        <span id="deepKnowledgeScore" class="text-2xl font-bold font-mono text-accent-purple">0</span>
+                        <span class="text-xs text-gray-500 font-mono">/ 100 pts</span>
+                    </div>
+                    <div class="w-full bg-dark-700 h-1.5 rounded-full overflow-hidden mt-2">
+                        <div id="deepKnowledgeBar" class="bg-gradient-to-r from-accent-purple to-accent-cyan h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <span id="deepAutopsiesCount" class="text-[11px] text-gray-400 block pt-1">0 autopsies conducted</span>
+                </div>
+
+                <div class="bg-dark-800 border border-dark-600 rounded-xl p-4 space-y-1">
+                    <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold block">Profit Factor</span>
+                    <div class="flex items-baseline space-x-2">
+                        <span id="deepProfitFactor" class="text-2xl font-bold font-mono text-emerald-400">1.00x</span>
+                        <span id="deepWinLossRatio" class="text-xs text-gray-400 font-mono">0W / 0L</span>
+                    </div>
+                    <div class="text-[11px] text-gray-400 flex items-center justify-between pt-2">
+                        <span>Win Rate: <b id="deepWinRatePct" class="text-emerald-400">0.0%</b></span>
+                        <span>Net: <b id="deepNetProfitSol" class="text-white">0.000 SOL</b></span>
+                    </div>
+                </div>
+
+                <div class="bg-dark-800 border border-dark-600 rounded-xl p-4 space-y-1">
+                    <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold block">Policy Version</span>
+                    <div class="flex items-baseline space-x-2">
+                        <span id="deepPolicyVer" class="text-2xl font-bold font-mono text-accent-cyan">v1</span>
+                        <span id="deepVelocity" class="text-xs text-gray-500 font-mono">self-tuning</span>
+                    </div>
+                    <div class="text-[11px] text-gray-400 flex items-center justify-between pt-2">
+                        <span>Dev Rugs Blocked: <b id="deepRugsBlocked" class="text-amber-400">0</b></span>
+                        <span>Stops Locked: <b id="deepStopsLocked" class="text-accent-cyan">0</b></span>
+                    </div>
+                </div>
+
+                <div class="bg-dark-800 border border-dark-600 rounded-xl p-4 space-y-1">
+                    <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold block">Peak Multiplier</span>
+                    <div class="flex items-baseline space-x-2">
+                        <span id="deepMaxWinPct" class="text-2xl font-bold font-mono text-accent-emerald">+0.0%</span>
+                        <span class="text-xs text-amber-400 font-bold">🚀</span>
+                    </div>
+                    <div class="text-[11px] text-gray-400 flex items-center justify-between pt-2">
+                        <span>Max Drawdown: <b id="deepMaxLossPct" class="text-rose-400">0.0%</b></span>
+                        <span>Avg Win: <b id="deepAvgWinPct" class="text-emerald-400">+0.0%</b></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trade Return & Multiplier Spectrum (100x & Runner Spectrum) -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="zap" class="w-4 h-4 text-amber-400"></i>
+                            <span>Trade Return Multipliers & Performance Spectrum</span>
+                        </h3>
+                        <p class="text-xs text-gray-400">Distribution of trade outcomes, moonshot multipliers, and capital defense cutoffs.</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1 text-center font-mono">
+                    <div class="p-3 bg-dark-900/60 border border-amber-500/30 rounded-xl">
+                        <span class="text-[10px] text-amber-400 font-bold block uppercase">💎 100x+ Moonshots</span>
+                        <span id="distMoonshots" class="text-xl font-bold text-white mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">&ge; +100% gain</span>
+                    </div>
+                    <div class="p-3 bg-dark-900/60 border border-emerald-500/30 rounded-xl">
+                        <span class="text-[10px] text-emerald-400 font-bold block uppercase">🚀 Big Runners</span>
+                        <span id="distRunners" class="text-xl font-bold text-white mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">+25% to +100%</span>
+                    </div>
+                    <div class="p-3 bg-dark-900/60 border border-accent-cyan/30 rounded-xl">
+                        <span class="text-[10px] text-accent-cyan font-bold block uppercase">🟢 Solid Wins</span>
+                        <span id="distScalps" class="text-xl font-bold text-white mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">+5% to +25%</span>
+                    </div>
+                    <div class="p-3 bg-dark-900/60 border border-dark-600 rounded-xl">
+                        <span class="text-[10px] text-gray-400 font-bold block uppercase">🟡 Scratches</span>
+                        <span id="distScratches" class="text-xl font-bold text-white mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">0% to +5%</span>
+                    </div>
+                    <div class="p-3 bg-dark-900/60 border border-rose-500/30 rounded-xl">
+                        <span class="text-[10px] text-rose-400 font-bold block uppercase">🔴 Controlled Cuts</span>
+                        <span id="distLosses" class="text-xl font-bold text-white mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">Trailing Stop cuts</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Two-Column Deep Dive: Hall of Fame & Mistakes Breakdown -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Hall of Fame: Agent's Top Winning Trades -->
+                <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                                <i data-lucide="award" class="w-4 h-4 text-amber-400"></i>
+                                <span>Hall of Fame: Top Winning Trades</span>
+                            </h3>
+                            <p class="text-xs text-gray-400 mt-0.5">The agent's highest multiplier and highest SOL-profit trades.</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="border-b border-dark-600 text-gray-400 font-semibold uppercase">
+                                    <th class="py-2.5 px-2">Rank & Token</th>
+                                    <th class="py-2.5 px-2">Multiplier</th>
+                                    <th class="py-2.5 px-2">Realized SOL</th>
+                                    <th class="py-2.5 px-2">Exit Catalyst</th>
+                                    <th class="py-2.5 px-2">Trigger Wallet</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hallOfFameTableBody" class="divide-y divide-dark-600 text-gray-300">
+                                <tr>
+                                    <td colspan="5" class="text-center py-6 text-gray-500">Scanning for winning trades...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Mistakes & Causal Autopsy Analysis (Lessons from Failures) -->
+                <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                                <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-400"></i>
+                                <span>Mistakes & Causal Autopsies</span>
+                            </h3>
+                            <p class="text-xs text-gray-400 mt-0.5">Lessons extracted from unprofitable trades to autonomously adapt risk rules.</p>
+                        </div>
+                        <span class="text-[11px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 font-semibold">Self-Correction Engine</span>
+                    </div>
+
+                    <div id="mistakesContainer" class="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+                        <div class="text-center py-6 text-gray-500 text-xs">
+                            No failure autopsies recorded. The agent logs every loss with root cause and corrective policy adjustment.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Autonomous Self-Tuned Hyperparameters & Market Regime -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="cpu" class="w-4 h-4 text-accent-purple"></i>
+                            <span>Autonomous Self-Tuning Brain (Live Learned State)</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Parameters dynamically adjusted by the agent based on post-trade reinforcement and runner hit rates.</p>
+                    </div>
+                    <span id="deepMarketRegime" class="px-2.5 py-1 rounded text-xs font-bold font-mono bg-cyan-500/20 text-accent-cyan border border-accent-cyan/30">
+                        RUNNER_ALPHA 🚀
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Runner Breathing Leash</span>
+                        <span id="deepRunnerLeash" class="text-base font-bold text-emerald-400 mt-0.5 block">28.0%</span>
+                        <span class="text-[10px] text-gray-500 block">Widens on early exits</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Profit Lock Floor</span>
+                        <span id="deepBreakevenLock" class="text-base font-bold text-accent-cyan mt-0.5 block">+35.0%</span>
+                        <span class="text-[10px] text-gray-500 block">Locks breakeven + gain</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Holding Horizon</span>
+                        <span id="deepHoldingHorizon" class="text-base font-bold text-amber-400 mt-0.5 block">60m (Adaptive)</span>
+                        <span class="text-[10px] text-gray-500 block">Migration Hold Active</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Smart Money Decoupling</span>
+                        <span id="deepDecoupling" class="text-base font-bold text-accent-purple mt-0.5 block">60.0%</span>
+                        <span class="text-[10px] text-gray-500 block">Moonbag independence</span>
+                    </div>
+                </div>
+
+                <!-- Policy Evolution Timeline -->
+                <div class="space-y-2 pt-2 border-t border-dark-700/60">
+                    <span class="text-xs text-gray-300 font-semibold block">Continuous Self-Optimization Timeline:</span>
+                    <div id="adaptationHistoryContainer" class="space-y-2 max-h-[220px] overflow-y-auto pr-1 text-xs">
+                        <div class="text-center py-4 text-gray-500">The agent logs every autonomous parameter tuning decision here as it learns from trades.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Online Machine Learning Brain (AdaGrad / SGDW Engine) -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="cpu" class="w-4 h-4 text-accent-emerald"></i>
+                            <span>Online Machine Learning Brain (AdaGrad / SGDW)</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Continuous local probabilistic model updating after every trade with zero cloud/API costs. Calibrates P(Profit &ge; 20% | X).</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Zero Cloud / 100% Local</span>
+                        <span id="mlTotalUpdates" class="px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20">0 Trades Learned</span>
+                    </div>
+                </div>
+
+                <!-- ML KPI Ribbon -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Model Architecture</span>
+                        <span class="text-sm font-bold text-accent-cyan mt-0.5 block truncate">Logistic AdaGrad</span>
+                        <span class="text-[10px] text-gray-500 block">&lt; 2&mu;s latency</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Brier Calibration MSE</span>
+                        <span id="mlBrierScore" class="text-sm font-bold text-emerald-400 mt-0.5 block">0.2500</span>
+                        <span class="text-[10px] text-gray-500 block">Lower is better</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Learning Rate & Decay</span>
+                        <span class="text-sm font-bold text-amber-400 mt-0.5 block">&eta; = 0.05 | L2 = 1e-3</span>
+                        <span class="text-[10px] text-gray-500 block">Decoupled SGDW</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Barbell Moonbag Engine</span>
+                        <span class="text-sm font-bold text-accent-purple mt-0.5 block">Active (2x &amp; 5x)</span>
+                        <span class="text-[10px] text-gray-500 block">35% Parabolic Leash</span>
+                    </div>
+                </div>
+
+                <!-- Learned Feature Weights Visualizer -->
+                <div class="space-y-2 pt-1 border-t border-dark-700/60">
+                    <span class="text-xs text-gray-300 font-semibold block">Real-time Learned Feature Weights (w_i):</span>
+                    <div id="mlFeatureWeightsContainer" class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] font-mono">
+                        <div class="text-center py-3 text-gray-500 col-span-full">Awaiting model weights...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Full Episodic Learning Stream -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="brain" class="w-4 h-4 text-accent-cyan"></i>
+                            <span>Complete Episodic Learning Stream</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Continuous chronological record of every closed trade autopsy and policy reinforcement.</p>
+                    </div>
+                </div>
+                <div id="learningLogsContainer" class="space-y-3">
+                    <div class="text-center py-6 text-gray-500 text-xs">
+                        No trade autopsies recorded yet.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: COGNITIVE ORGANISM & RESEARCH ARENA -->
+        <section id="cognitiveTab" class="tab-content hidden space-y-6">
+
+            <!-- 1. Macro Regime & Evidentiary Conviction Ribbon -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="text-base font-bold text-white">Autonomous Market Research Organism</h2>
+                            <span id="cogRegimeBadge" class="px-2.5 py-0.5 rounded text-xs font-bold font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">ORGANIC_MOMENTUM</span>
+                            <span id="cogHurdleBadge" class="px-2.5 py-0.5 rounded text-xs font-bold font-mono bg-dark-700 text-gray-300 border border-dark-600">Hurdle: +5.0% Expected Edge</span>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">Multi-Brain Bayesian Committee, 60-minute Counterfactual Shadow Ledger, and Unsupervised Association Rule Mining. Zero AI Theatre.</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2.5 py-1 rounded bg-accent-cyan/10 text-accent-cyan text-xs border border-accent-cyan/20 font-mono font-medium">Deterministic Causal Audits</span>
+                    </div>
+                </div>
+
+                <!-- Cumulative Cognitive Experience Counters -->
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center font-mono pt-2 border-t border-dark-700/60">
+                    <div class="p-3 bg-dark-900/60 border border-dark-700 rounded-xl">
+                        <span class="text-[10px] text-gray-400 font-bold block uppercase">Tokens Evaluated</span>
+                        <span id="expTokensSeen" class="text-xl font-bold text-white mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">Lifecycle Tracked</span>
+                    </div>
+                    <div class="p-3 bg-dark-900/60 border border-dark-700 rounded-xl">
+                        <span class="text-[10px] text-accent-cyan font-bold block uppercase">Sybil Clusters</span>
+                        <span id="expClustersMapped" class="text-xl font-bold text-accent-cyan mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">Bayesian Graph</span>
+                    </div>
+                    <div class="p-3 bg-dark-900/60 border border-dark-700 rounded-xl">
+                        <span class="text-[10px] text-accent-purple font-bold block uppercase">Trade Autopsies</span>
+                        <span id="expAutopsiesConducted" class="text-xl font-bold text-accent-purple mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">Causal Lessons</span>
+                    </div>
+                    <div class="p-3 bg-dark-900/60 border border-dark-700 rounded-xl">
+                        <span class="text-[10px] text-emerald-400 font-bold block uppercase">Shadow Ledger</span>
+                        <span id="expCounterfactualsTracked" class="text-xl font-bold text-emerald-400 mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">60m Passes Tracked</span>
+                    </div>
+                    <div class="p-3 bg-dark-900/60 border border-dark-700 rounded-xl">
+                        <span class="text-[10px] text-amber-400 font-bold block uppercase">Discovered Hypotheses</span>
+                        <span id="expHypothesesDiscovered" class="text-xl font-bold text-amber-400 mt-1 block">0</span>
+                        <span class="text-[10px] text-gray-500 block">Association Rules</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Multi-Brain Committee Radar (6 Orthogonal Brains) -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="cpu" class="w-4 h-4 text-accent-purple"></i>
+                            <span>Multi-Brain Committee Arena (6 Orthogonal Hypotheses)</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Every candidate token is independently scrutinized by 6 specialized brains before meta-decision synthesis.</p>
+                    </div>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-dark-700 text-gray-300 border border-dark-600">Regime-Adaptive Weights</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="brainCardsContainer">
+                    <!-- 1. GraphBrain -->
+                    <div class="bg-dark-900/70 border border-dark-700 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-accent-cyan text-sm flex items-center space-x-1.5">
+                                <i data-lucide="git-merge" class="w-4 h-4"></i>
+                                <span>GraphBrain</span>
+                            </span>
+                            <span id="weightGraphBrain" class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-cyan-500/10 text-accent-cyan border border-cyan-500/20">20% Weight</span>
+                        </div>
+                        <p class="text-xs text-gray-400 leading-relaxed">Topology, Sybil cluster archetypes, timing synchrony (&le;2.5s), and D_KL identity drift suppression.</p>
+                        <div class="text-[11px] text-gray-500 font-mono pt-1 border-t border-dark-700/60 flex justify-between">
+                            <span>Role: Entity Unmasking</span>
+                            <span class="text-emerald-400">ACTIVE</span>
+                        </div>
+                    </div>
+
+                    <!-- 2. FlowBrain -->
+                    <div class="bg-dark-900/70 border border-dark-700 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-accent-emerald text-sm flex items-center space-x-1.5">
+                                <i data-lucide="trending-up" class="w-4 h-4"></i>
+                                <span>FlowBrain</span>
+                            </span>
+                            <span id="weightFlowBrain" class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">25% Weight</span>
+                        </div>
+                        <p class="text-xs text-gray-400 leading-relaxed">Microstructure order flow velocity, 1m/5m volume acceleration, and net buy/sell flow imbalances.</p>
+                        <div class="text-[11px] text-gray-500 font-mono pt-1 border-t border-dark-700/60 flex justify-between">
+                            <span>Role: Microstructure Momentum</span>
+                            <span class="text-emerald-400">ACTIVE</span>
+                        </div>
+                    </div>
+
+                    <!-- 3. RunnerBrain -->
+                    <div class="bg-dark-900/70 border border-dark-700 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-amber-400 text-sm flex items-center space-x-1.5">
+                                <i data-lucide="zap" class="w-4 h-4"></i>
+                                <span>RunnerBrain</span>
+                            </span>
+                            <span id="weightRunnerBrain" class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">25% Weight</span>
+                        </div>
+                        <p class="text-xs text-gray-400 leading-relaxed">10x-100x Convexity Curve, curve sweet spot (15%-42%), dev token drain, and holder dispersion.</p>
+                        <div class="text-[11px] text-gray-500 font-mono pt-1 border-t border-dark-700/60 flex justify-between">
+                            <span>Role: Asymmetric Convexity</span>
+                            <span class="text-emerald-400">ACTIVE</span>
+                        </div>
+                    </div>
+
+                    <!-- 4. AdversaryBrain -->
+                    <div class="bg-dark-900/70 border border-dark-700 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-rose-400 text-sm flex items-center space-x-1.5">
+                                <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                                <span>AdversaryBrain</span>
+                            </span>
+                            <span id="weightAdversaryBrain" class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">15% + VETO</span>
+                        </div>
+                        <p class="text-xs text-gray-400 leading-relaxed">Adversarial simulation, copy-bot honeypots, dev dump traps. Possesses hard non-linear VETO power.</p>
+                        <div class="text-[11px] text-gray-500 font-mono pt-1 border-t border-dark-700/60 flex justify-between">
+                            <span>Role: Capital Defense Veto</span>
+                            <span class="text-rose-400 font-bold">VETO POWER</span>
+                        </div>
+                    </div>
+
+                    <!-- 5. ContrarianBrain -->
+                    <div class="bg-dark-900/70 border border-dark-700 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-accent-purple text-sm flex items-center space-x-1.5">
+                                <i data-lucide="compass" class="w-4 h-4"></i>
+                                <span>ContrarianBrain</span>
+                            </span>
+                            <span id="weightContrarianBrain" class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-purple-500/10 text-accent-purple border border-purple-500/20">15% Weight</span>
+                        </div>
+                        <p class="text-xs text-gray-400 leading-relaxed">Fades retail crowd FOMO exhaustion at the top of the curve; spots stealth smart accumulation.</p>
+                        <div class="text-[11px] text-gray-500 font-mono pt-1 border-t border-dark-700/60 flex justify-between">
+                            <span>Role: Retail Exhaustion Fade</span>
+                            <span class="text-emerald-400">ACTIVE</span>
+                        </div>
+                    </div>
+
+                    <!-- 6. RegimeBrain -->
+                    <div class="bg-dark-900/70 border border-dark-700 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-blue-400 text-sm flex items-center space-x-1.5">
+                                <i data-lucide="bar-chart" class="w-4 h-4"></i>
+                                <span>RegimeBrain</span>
+                            </span>
+                            <span class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">Hurdle Setter</span>
+                        </div>
+                        <p class="text-xs text-gray-400 leading-relaxed">Monitors macro network velocity and sets dynamic hurdle rates (e.g. 5% organic vs 12% predatory).</p>
+                        <div class="text-[11px] text-gray-500 font-mono pt-1 border-t border-dark-700/60 flex justify-between">
+                            <span>Role: Dynamic Edge Hurdle</span>
+                            <span class="text-blue-400 font-bold">CALIBRATOR</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Causal Decision Audit Feed (Zero AI Theatre) -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="list-checks" class="w-4 h-4 text-accent-cyan"></i>
+                            <span>Causal Decision Audit Feed (Zero AI Theatre)</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Real-time trace of every token evaluated by the committee with deterministic reasoning and brain scores.</p>
+                    </div>
+                    <span class="text-[11px] text-gray-400 font-mono">Last 15 Evaluations</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="border-b border-dark-600 text-gray-400 font-semibold uppercase">
+                                <th class="py-2.5 px-3">Time & Token</th>
+                                <th class="py-2.5 px-3">Decision</th>
+                                <th class="py-2.5 px-3">Expected Edge vs Hurdle</th>
+                                <th class="py-2.5 px-3">Dominant Causal Reason / Veto</th>
+                                <th class="py-2.5 px-3">Brain Committee Breakdown</th>
+                            </tr>
+                        </thead>
+                        <tbody id="decisionsTableBody" class="divide-y divide-dark-600 text-gray-300 font-mono">
+                            <tr>
+                                <td colspan="5" class="text-center py-6 text-gray-500">Awaiting candidate token evaluations...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. Counterfactual Shadow Ledger (Alpha from What We Passed) -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="ghost" class="w-4 h-4 text-emerald-400"></i>
+                            <span>Counterfactual Shadow Ledger (60-Minute Horizon Tracking)</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">The agent monitors every passed token for 60 minutes to learn from 100x more events without risking real capital.</p>
+                    </div>
+                    <span class="text-xs font-mono px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold" id="cfCapitalPreservedBadge">+0.000 SOL Preserved</span>
+                </div>
+
+                <!-- Shadow KPI Ribbon -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Currently Shadow Tracking</span>
+                        <span id="cfCurrentlyTracking" class="text-base font-bold text-accent-cyan mt-0.5 block">0 Tokens</span>
+                        <span class="text-[10px] text-gray-500 block">Live spot price sampling</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Confirmed Rug Dodges</span>
+                        <span id="cfConfirmedRugs" class="text-base font-bold text-emerald-400 mt-0.5 block">0 Dodged</span>
+                        <span class="text-[10px] text-gray-500 block">Passed tokens dropped &gt;50%</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Confirmed Chop Dodges</span>
+                        <span id="cfConfirmedChops" class="text-base font-bold text-gray-300 mt-0.5 block">0 Dodged</span>
+                        <span class="text-[10px] text-gray-500 block">Unprofitable churn avoided</span>
+                    </div>
+                    <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700">
+                        <span class="text-gray-400 text-[11px] block">Missed Runners (False Neg)</span>
+                        <span id="cfMissedRunners" class="text-base font-bold text-rose-400 mt-0.5 block">0 Missed</span>
+                        <span class="text-[10px] text-gray-500 block">Passed tokens peaked &ge;3x</span>
+                    </div>
+                </div>
+
+                <!-- Active Shadow Tracking Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse font-mono">
+                        <thead>
+                            <tr class="border-b border-dark-600 text-gray-400 font-semibold uppercase">
+                                <th class="py-2.5 px-3">Token</th>
+                                <th class="py-2.5 px-3">Initial Spot</th>
+                                <th class="py-2.5 px-3">Peak Multiplier</th>
+                                <th class="py-2.5 px-3">Current Return</th>
+                                <th class="py-2.5 px-3">Initial Curve %</th>
+                                <th class="py-2.5 px-3">Dominant Skip Reason</th>
+                                <th class="py-2.5 px-3">Tracking Age</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shadowTableBody" class="divide-y divide-dark-600 text-gray-300">
+                            <tr>
+                                <td colspan="7" class="text-center py-6 text-gray-500">No active shadow positions being tracked currently.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 5. Autonomous Offline Research Agent (Discovered Hypotheses) -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-amber-400"></i>
+                            <span>Autonomous Offline Research Agent (Discovered Hypotheses Evolution)</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Unsupervised association rule mining on resolved counterfactuals discovering high-lift predictive rules.</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">Self-Discovered Alpha</span>
+                    </div>
+                </div>
+
+                <div class="space-y-3" id="hypothesesContainer">
+                    <div class="text-center py-6 text-gray-500 text-xs font-mono">
+                        Awaiting hypothesis discovery cycles...
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. Sybil Clusters & Identity Drift Dossier -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="share-2" class="w-4 h-4 text-accent-cyan"></i>
+                            <span>Probabilistic Sybil Clusters &amp; Identity Drift Tracker</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">On-chain wallet syndicates identified via temporal synchrony (&le;2.5s) and Jaccard token overlap.</p>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse font-mono">
+                        <thead>
+                            <tr class="border-b border-dark-600 text-gray-400 font-semibold uppercase">
+                                <th class="py-2.5 px-3">Cluster ID</th>
+                                <th class="py-2.5 px-3">Archetype</th>
+                                <th class="py-2.5 px-3">Members</th>
+                                <th class="py-2.5 px-3">P(Coordinated)</th>
+                                <th class="py-2.5 px-3">Avg Co-Entry Delta</th>
+                                <th class="py-2.5 px-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clustersTableBody" class="divide-y divide-dark-600 text-gray-300">
+                            <tr>
+                                <td colspan="6" class="text-center py-6 text-gray-500">Mapping on-chain wallet topology...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- TAB 4: STRATEGY HYPERPARAMETERS -->
+        <section id="settingsTab" class="tab-content hidden space-y-6">
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-2xl mx-auto space-y-6">
+                <div>
+                    <h2 class="text-base font-bold text-white">Live Strategy Hyperparameters</h2>
+                    <p class="text-xs text-gray-400 mt-0.5">Adjust risk tolerances and autonomous sizing parameters. Changes apply immediately to the running engine without rebooting.</p>
+                </div>
+
+                <form id="paramsForm" onsubmit="submitParams(event)" class="space-y-4 text-xs">
+                    <div>
+                        <label class="block text-gray-300 font-semibold mb-1">Cold-Start Base Trade Size (SOL):</label>
+                        <input type="number" step="0.01" min="0.05" max="1.0" id="paramBaseSize" class="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-white font-mono focus:border-accent-cyan outline-none">
+                        <span class="text-gray-500 text-[11px]">Initial position size when confidence is at baseline (0.50).</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-300 font-semibold mb-1">Max Position Size Ceiling (SOL):</label>
+                        <input type="number" step="0.01" min="0.10" max="2.0" id="paramMaxSize" class="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-white font-mono focus:border-accent-cyan outline-none">
+                        <span class="text-gray-500 text-[11px]">Maximum size the agent can autonomously open on high-conviction signals.</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-300 font-semibold mb-1">Trailing Stop-Loss %:</label>
+                        <input type="number" step="0.01" min="0.05" max="0.50" id="paramTrailingStop" class="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-white font-mono focus:border-accent-cyan outline-none">
+                        <span class="text-gray-500 text-[11px]">Trailing distance from peak price (e.g. 0.18 = 18%). Auto-tightens to 9% when up > 40%.</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-300 font-semibold mb-1">Take-Profit Target %:</label>
+                        <input type="number" step="0.01" min="0.10" max="2.0" id="paramTakeProfit" class="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-white font-mono focus:border-accent-cyan outline-none">
+                        <span class="text-gray-500 text-[11px]">First milestone target (e.g. 0.50 = +50%).</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-300 font-semibold mb-1">Minimum Wallet Persistence Score:</label>
+                        <input type="number" step="0.01" min="0.20" max="0.90" id="paramMinPersistence" class="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-white font-mono focus:border-accent-cyan outline-none">
+                        <span class="text-gray-500 text-[11px]">Minimum score required to qualify as smart money lead (0.40 recommended).</span>
+                    </div>
+
+                    <button type="submit" class="w-full bg-accent-cyan hover:bg-cyan-500 text-black font-bold py-2.5 rounded-lg text-sm transition">
+                        Update Hyperparameters Live
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 5: ANALYTICS & LONG-TERM PERFORMANCE -->
+        <section id="analyticsTab" class="tab-content hidden space-y-6">
+            <!-- 1. Top Ribbon Analytics Metrics -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                    <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Realized Profit</span>
+                    <div id="analyticsNetPnl" class="text-xl font-bold text-emerald-400 mt-1">0.0000 SOL</div>
+                    <div id="analyticsTotalTrades" class="text-[11px] text-gray-500 mt-0.5">0 trades closed</div>
+                </div>
+
+                <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                    <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Profit Factor</span>
+                    <div id="analyticsProfitFactor" class="text-xl font-bold text-accent-cyan mt-1">1.00x</div>
+                    <div id="analyticsGrossPnL" class="text-[11px] text-gray-500 mt-0.5">+0.00 / -0.00 SOL</div>
+                </div>
+
+                <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                    <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Win Rate</span>
+                    <div id="analyticsWinRate" class="text-xl font-bold text-white mt-1">0.0%</div>
+                    <div id="analyticsWinsLosses" class="text-[11px] text-gray-500 mt-0.5">0W / 0L</div>
+                </div>
+
+                <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                    <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Avg Win / Loss</span>
+                    <div id="analyticsAvgWinLoss" class="text-xl font-bold text-emerald-400 mt-1">+0.0%</div>
+                    <div id="analyticsAvgLossPct" class="text-[11px] text-rose-400 mt-0.5">Loss: -0.0%</div>
+                </div>
+
+                <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                    <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Max Drawdown</span>
+                    <div id="analyticsMaxDrawdown" class="text-xl font-bold text-rose-400 mt-1">0.0%</div>
+                    <div id="analyticsMaxDrawdownSol" class="text-[11px] text-gray-500 mt-0.5">0.0000 SOL</div>
+                </div>
+
+                <div class="bg-dark-800 border border-dark-600 p-4 rounded-xl relative overflow-hidden">
+                    <span class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Best Trade</span>
+                    <div id="analyticsMaxWinPct" class="text-xl font-bold text-amber-300 mt-1">+0.0%</div>
+                    <div id="analyticsWorstLossPct" class="text-[11px] text-rose-500 mt-0.5">Worst: 0.0%</div>
+                </div>
+            </div>
+
+            <!-- 2. Cumulative Equity Curve Visualization -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="trending-up" class="w-4 h-4 text-accent-emerald"></i>
+                            <span>Cumulative Portfolio Equity Progression</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Real-time tracking of portfolio balance across every executed trade.</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span id="equityStartVal" class="text-xs font-mono text-gray-400 bg-dark-700 px-2.5 py-1 rounded-lg border border-dark-600">Start: 10.000 SOL</span>
+                        <span id="equityCurrentVal" class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/30 font-bold">Current: 10.000 SOL</span>
+                    </div>
+                </div>
+
+                <!-- Responsive Equity Curve SVG Container -->
+                <div id="equityCurveContainer" class="w-full h-64 bg-dark-900/80 rounded-xl border border-dark-700 p-3 flex items-center justify-center relative">
+                    <div id="equityEmptyNotice" class="text-gray-500 text-xs font-mono">Simulating trades... Equity curve will plot here automatically.</div>
+                    <svg id="equityCurveSvg" class="w-full h-full hidden" preserveAspectRatio="none"></svg>
+                </div>
+            </div>
+
+            <!-- 3. Exit Reasons & Strategic Attribution -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Exit Reason Breakdown Card -->
+                <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-3">
+                    <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                        <i data-lucide="pie-chart" class="w-4 h-4 text-accent-cyan"></i>
+                        <span>Exit Triggers & Attribution</span>
+                    </h3>
+                    <p class="text-xs text-gray-400">Distribution of trade outcomes and their net SOL contribution.</p>
+                    <div id="exitReasonsContainer" class="space-y-2 pt-2 text-xs">
+                        <div class="text-gray-500 text-xs text-center py-4">Awaiting closed trades...</div>
+                    </div>
+                </div>
+
+                <!-- Export & Offline Research Actions Card -->
+                <div class="lg:col-span-2 bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                                <i data-lucide="download" class="w-4 h-4 text-accent-purple"></i>
+                                <span>Continuous Data Exporters & Multi-Agent Feedback</span>
+                            </h3>
+                            <p class="text-xs text-gray-400 mt-0.5">Export full trade datasets and machine learnings for external AI or quant backtesting.</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                        <div class="p-4 rounded-xl bg-dark-900/60 border border-dark-700 space-y-2">
+                            <div class="flex items-center space-x-2">
+                                <i data-lucide="table" class="w-4 h-4 text-accent-emerald"></i>
+                                <span class="font-bold text-xs text-white">Full Trades History (CSV)</span>
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                Complete tabular export including entry/exit timestamps, spot prices, fee deductions, hold durations, and trigger wallets.
+                            </p>
+                            <a href="/api/analytics/export/trades.csv" download class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-accent-emerald/10 hover:bg-accent-emerald/20 text-accent-emerald border border-accent-emerald/30 transition mt-2">
+                                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                                <span>Download trades.csv</span>
+                            </a>
+                        </div>
+
+                        <div class="p-4 rounded-xl bg-dark-900/60 border border-dark-700 space-y-2">
+                            <div class="flex items-center space-x-2">
+                                <i data-lucide="file-json" class="w-4 h-4 text-accent-cyan"></i>
+                                <span class="font-bold text-xs text-white">Cognitive Learnings & Autopsies (JSON)</span>
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                Full dump of episodic failure autopsies, counterfactual shadow records, discovered hypotheses, and Sybil cluster graphs.
+                            </p>
+                            <a href="/api/analytics/export/learnings.json" download class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-accent-cyan/10 hover:bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 transition mt-2">
+                                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                                <span>Download learnings.json</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Complete Searchable Historical Closed Trades Table -->
+            <div class="bg-dark-800 border border-dark-600 rounded-xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <i data-lucide="history" class="w-4 h-4 text-gray-400"></i>
+                            <span>Historical Closed Positions Ledger</span>
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Chronological trade-by-trade ledger with real exit execution details.</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="tradeHistorySearch" oninput="filterTradeHistory()" placeholder="Filter by Symbol or Mint..." class="bg-dark-700 border border-dark-600 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 font-mono outline-none focus:border-accent-cyan">
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse font-mono">
+                        <thead>
+                            <tr class="border-b border-dark-600 text-gray-400 font-semibold uppercase">
+                                <th class="py-2.5 px-3">Token</th>
+                                <th class="py-2.5 px-3">Entry &rarr; Exit</th>
+                                <th class="py-2.5 px-3">Hold Time</th>
+                                <th class="py-2.5 px-3">Size (SOL)</th>
+                                <th class="py-2.5 px-3">Net PnL</th>
+                                <th class="py-2.5 px-3">Exit Reason</th>
+                                <th class="py-2.5 px-3">Trigger Wallet</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeHistoryTableBody" class="divide-y divide-dark-600 text-gray-300">
+                            <tr>
+                                <td colspan="7" class="text-center py-6 text-gray-500">Loading closed trades history...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- MODAL: TOKEN CHART & DEEP ANALYSIS -->
+    <div id="tokenChartModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-6">
+        <div class="bg-dark-800 border border-dark-600 rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <!-- Modal Header -->
+            <div class="p-4 sm:px-6 border-b border-dark-600 flex items-center justify-between bg-dark-900/50">
+                <div class="flex items-center space-x-3">
+                    <div id="modalTokenBadge" class="w-10 h-10 rounded-xl bg-accent-purple/20 text-accent-purple font-bold flex items-center justify-center text-sm border border-accent-purple/30">
+                        COIN
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span id="modalTokenSymbol" class="text-white font-bold text-base">COIN</span>
+                            <span id="modalTokenName" class="text-gray-400 text-xs">Pump Token</span>
+                        </div>
+                        <div class="flex items-center space-x-2 mt-0.5">
+                            <span id="modalTokenMint" class="font-mono text-xs text-accent-cyan select-all"></span>
+                            <button onclick="copyModalMint()" class="text-gray-400 hover:text-white transition p-0.5" title="Copy Mint Contract Address">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <a id="modalPumpFunLink" href="#" target="_blank" class="px-3 py-1.5 rounded-lg bg-accent-emerald/10 hover:bg-accent-emerald/20 text-accent-emerald border border-accent-emerald/30 text-xs font-semibold flex items-center space-x-1.5 transition">
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                        <span>Pump.fun</span>
+                    </a>
+                    <a id="modalDexScreenerLink" href="#" target="_blank" class="px-3 py-1.5 rounded-lg bg-accent-cyan/10 hover:bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 text-xs font-semibold flex items-center space-x-1.5 transition">
+                        <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i>
+                        <span>DexScreener</span>
+                    </a>
+                    <button onclick="closeModal('tokenChartModal')" class="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-400 hover:text-white transition">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Body (Scrollable) -->
+            <div class="p-4 sm:p-6 overflow-y-auto space-y-5">
+                <!-- Live Chart Iframe -->
+                <div class="relative w-full h-80 sm:h-96 rounded-xl overflow-hidden border border-dark-600 bg-dark-900">
+                    <iframe id="tokenChartIframe" class="w-full h-full" src="" frameborder="0" allowfullscreen></iframe>
+                </div>
+
+                <!-- Bonding Curve Progress Bar -->
+                <div class="bg-dark-900/60 border border-dark-700 rounded-xl p-4 space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-gray-400 font-medium flex items-center space-x-1.5">
+                            <i data-lucide="activity" class="w-3.5 h-3.5 text-accent-cyan"></i>
+                            <span>Bonding Curve Migration Progress</span>
+                        </span>
+                        <span id="modalBondingPct" class="font-mono font-bold text-accent-cyan">0.0%</span>
+                    </div>
+                    <div class="w-full bg-dark-700 h-2.5 rounded-full overflow-hidden">
+                        <div id="modalBondingBar" class="bg-gradient-to-r from-accent-cyan via-accent-purple to-accent-emerald h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-gray-500 font-mono">
+                        <span>Reserves: <span id="modalVirtualSol" class="text-gray-300">30.0</span> SOL</span>
+                        <span>Raydium Migration Target: 85.0 SOL</span>
+                    </div>
+                </div>
+
+                <!-- Deep Metrics Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div class="bg-dark-900/60 border border-dark-700 p-3 rounded-xl">
+                        <span class="text-[10px] text-gray-500 block uppercase">Spot Price</span>
+                        <span id="modalSpotPrice" class="font-mono text-gray-200 font-semibold mt-0.5 block">--</span>
+                    </div>
+                    <div class="bg-dark-900/60 border border-dark-700 p-3 rounded-xl">
+                        <span class="text-[10px] text-gray-500 block uppercase">Market Cap</span>
+                        <span id="modalMarketCap" class="font-mono text-gray-200 font-semibold mt-0.5 block">--</span>
+                    </div>
+                    <div class="bg-dark-900/60 border border-dark-700 p-3 rounded-xl">
+                        <span class="text-[10px] text-gray-500 block uppercase">Tokens Remaining</span>
+                        <span id="modalTokensLeft" class="font-mono text-gray-200 font-semibold mt-0.5 block">--</span>
+                    </div>
+                    <div class="bg-dark-900/60 border border-dark-700 p-3 rounded-xl">
+                        <span class="text-[10px] text-gray-500 block uppercase">Dev Initial Buy</span>
+                        <span id="modalDevBuy" class="font-mono text-gray-200 font-semibold mt-0.5 block">--</span>
+                    </div>
+                </div>
+
+                <!-- Dev & Smart Wallet Origin -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div class="bg-dark-900/60 border border-dark-700 p-3.5 rounded-xl space-y-1.5">
+                        <div class="text-[11px] font-semibold text-gray-400 flex items-center space-x-1.5">
+                            <i data-lucide="user" class="w-3.5 h-3.5 text-accent-purple"></i>
+                            <span>Token Creator (Dev) Address</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span id="modalDevAddress" class="font-mono text-xs text-gray-300 truncate max-w-[220px]">Unknown</span>
+                            <div class="flex items-center space-x-1.5">
+                                <button onclick="copyModalDev()" class="p-1 rounded bg-dark-700 hover:bg-dark-600 text-gray-300 hover:text-white" title="Copy Dev Address">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                </button>
+                                <a id="modalDevSolscan" href="#" target="_blank" class="p-1 rounded bg-dark-700 hover:bg-dark-600 text-gray-300 hover:text-white" title="View on Solscan">
+                                    <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-dark-900/60 border border-dark-700 p-3.5 rounded-xl space-y-1.5">
+                        <div class="text-[11px] font-semibold text-gray-400 flex items-center space-x-1.5">
+                            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-accent-emerald"></i>
+                            <span>Trigger Smart Wallet</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span id="modalTriggerWallet" class="font-mono text-xs text-accent-cyan truncate max-w-[220px]">None</span>
+                            <div class="flex items-center space-x-1.5">
+                                <button onclick="copyModalTrigger()" class="p-1 rounded bg-dark-700 hover:bg-dark-600 text-gray-300 hover:text-white" title="Copy Trigger Wallet">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                </button>
+                                <a id="modalTriggerSolscan" href="#" target="_blank" class="p-1 rounded bg-dark-700 hover:bg-dark-600 text-gray-300 hover:text-white" title="View on Solscan">
+                                    <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: WALLET DOSSIER INSPECTOR -->
+    <div id="walletDossierModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-6">
+        <div class="bg-dark-800 border border-dark-600 rounded-2xl max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 sm:px-6 border-b border-dark-600 flex items-center justify-between bg-dark-900/50">
+                <div>
+                    <span id="modalWalletBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-accent-emerald/20 text-accent-emerald border border-accent-emerald/30">ELITE HUNTER</span>
+                    <div class="flex items-center space-x-2 mt-1">
+                        <span id="modalWalletFullAddress" class="font-mono text-sm text-white font-bold select-all"></span>
+                        <button onclick="copyWalletDossierAddr()" class="text-gray-400 hover:text-white p-0.5" title="Copy Address">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <a id="modalWalletSolscan" href="#" target="_blank" class="px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-300 text-xs font-semibold flex items-center space-x-1.5 transition">
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                        <span>Solscan</span>
+                    </a>
+                    <button onclick="closeModal('walletDossierModal')" class="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-400 hover:text-white transition">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-5 overflow-y-auto space-y-4">
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="bg-dark-900/60 border border-dark-700 p-3 rounded-xl">
+                        <span class="text-[10px] text-gray-500 block uppercase">Persistence Score</span>
+                        <span id="modalWalletScore" class="font-mono text-base font-bold text-white mt-0.5 block">--</span>
+                    </div>
+                    <div class="bg-dark-900/60 border border-dark-700 p-3 rounded-xl">
+                        <span class="text-[10px] text-gray-500 block uppercase">Win Rate (Closed)</span>
+                        <span id="modalWalletWinRate" class="font-mono text-base font-bold text-emerald-400 mt-0.5 block">--%</span>
+                    </div>
+                    <div class="bg-dark-900/60 border border-dark-700 p-3 rounded-xl">
+                        <span class="text-[10px] text-gray-500 block uppercase">Realized Profit</span>
+                        <span id="modalWalletPnL" class="font-mono text-base font-bold text-emerald-400 mt-0.5 block">-- SOL</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 text-center text-xs">
+                    <div class="bg-dark-900/60 border border-dark-700 p-2.5 rounded-xl font-mono">
+                        <span class="text-[10px] text-gray-500 block">CLOSED / TOTAL TRADES</span>
+                        <span id="modalWalletTrades" class="text-gray-200 mt-0.5 block">-- / --</span>
+                    </div>
+                    <div class="bg-dark-900/60 border border-dark-700 p-2.5 rounded-xl font-mono">
+                        <span class="text-[10px] text-gray-500 block">ACTIVE LIFESPAN</span>
+                        <span id="modalWalletHours" class="text-gray-200 mt-0.5 block">-- hours</span>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-xs font-semibold text-gray-400 block">Tokens Traded by this Wallet:</span>
+                    <div id="modalWalletTokensList" class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-2 bg-dark-900/50 rounded-xl border border-dark-700">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DEPOSIT -->
+    <div id="depositModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-sm w-full space-y-4">
+            <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                <i data-lucide="plus-circle" class="w-4 h-4 text-accent-emerald"></i>
+                <span>Deposit Simulated SOL</span>
+            </h3>
+            <p class="text-xs text-gray-400">Add paper trading capital to your available balance.</p>
+            <input type="number" step="0.1" min="0.1" id="depositInput" placeholder="Amount in SOL (e.g. 5.0)" class="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-white font-mono text-sm outline-none focus:border-accent-emerald">
+            <div class="flex space-x-2">
+                <button onclick="closeModal('depositModal')" class="flex-1 bg-dark-700 hover:bg-dark-600 text-gray-300 py-2 rounded-lg text-xs font-semibold">Cancel</button>
+                <button onclick="handleDeposit()" class="flex-1 bg-accent-emerald hover:bg-emerald-600 text-black py-2 rounded-lg text-xs font-bold">Deposit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: WITHDRAW -->
+    <div id="withdrawModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-sm w-full space-y-4">
+            <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                <i data-lucide="minus-circle" class="w-4 h-4 text-accent-rose"></i>
+                <span>Withdraw Simulated SOL</span>
+            </h3>
+            <p class="text-xs text-gray-400">Withdraw paper trading capital from available balance.</p>
+            <input type="number" step="0.1" min="0.1" id="withdrawInput" placeholder="Amount in SOL (e.g. 2.0)" class="w-full bg-dark-700 border border-dark-600 rounded-lg p-2.5 text-white font-mono text-sm outline-none focus:border-accent-rose">
+            <div class="flex space-x-2">
+                <button onclick="closeModal('withdrawModal')" class="flex-1 bg-dark-700 hover:bg-dark-600 text-gray-300 py-2 rounded-lg text-xs font-semibold">Cancel</button>
+                <button onclick="handleWithdraw()" class="flex-1 bg-accent-rose hover:bg-rose-600 text-white py-2 rounded-lg text-xs font-bold">Withdraw</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: RESET OPTIONS (SOFT vs HARD RESET) -->
+    <div id="resetBalanceModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-lg w-full space-y-5 shadow-2xl animate-fade-in">
+            <div class="flex items-center justify-between border-b border-dark-700 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                    <i data-lucide="rotate-ccw" class="w-5 h-5 text-accent-cyan"></i>
+                    <span>Agent Reset Center</span>
+                </h3>
+                <button onclick="closeModal('resetBalanceModal')" class="text-gray-400 hover:text-white p-1 transition">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-gray-400">Choose between a balance-only reset or a complete factory clean-slate wipe.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Option 1: Soft Reset -->
+                <div class="p-4 rounded-xl border border-accent-cyan/30 bg-dark-900/70 flex flex-col justify-between space-y-3 hover:border-accent-cyan/60 transition">
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="p-2 rounded-lg bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20">
+                                <i data-lucide="wallet" class="w-4 h-4"></i>
+                            </span>
+                            <div>
+                                <span class="font-bold text-white text-sm block">Soft Reset</span>
+                                <span class="text-[10px] text-accent-cyan font-semibold uppercase tracking-wider block">Balance Only</span>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            Resets your available paper capital to a custom SOL amount. <b>Preserves</b> all learned ML weights, wallet track records, autopsies, and history intact.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2 pt-2 border-t border-dark-700/60">
+                        <label class="text-[10px] text-gray-400 block font-mono">NEW BALANCE (SOL):</label>
+                        <input type="number" step="0.1" min="0.1" id="softResetBalanceInput" value="10.0" class="w-full bg-dark-800 border border-dark-600 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs outline-none focus:border-accent-cyan">
+                        <button onclick="handleSoftReset()" class="w-full bg-accent-cyan/15 hover:bg-accent-cyan/25 text-accent-cyan border border-accent-cyan/30 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5">
+                            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                            <span>Soft Reset (Balance)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Option 2: Hard Reset -->
+                <div class="p-4 rounded-xl border border-rose-500/30 bg-dark-900/70 flex flex-col justify-between space-y-3 hover:border-rose-500/60 transition">
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="p-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </span>
+                            <div>
+                                <span class="font-bold text-white text-sm block">Hard Reset</span>
+                                <span class="text-[10px] text-rose-400 font-semibold uppercase tracking-wider block">Complete Wipe</span>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            <b>Wipes everything clean</b>. Clears all trades, positions, wallet dossiers, ML model weights, and resets policy back to v1. Acts 100% brand new.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2 pt-2 border-t border-dark-700/60">
+                        <label class="text-[10px] text-gray-400 block font-mono">STARTING CAPITAL (SOL):</label>
+                        <input type="number" step="0.1" min="0.1" id="hardResetBalanceInput" value="10.0" class="w-full bg-dark-800 border border-dark-600 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs outline-none focus:border-rose-400">
+                        <button onclick="handleHardReset()" class="w-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5">
+                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+                            <span>Hard Reset (Wipe All)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-1">
+                <button onclick="closeModal('resetBalanceModal')" class="bg-dark-700 hover:bg-dark-600 text-gray-300 px-4 py-1.5 rounded-lg text-xs font-semibold transition">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=20260903_3"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
