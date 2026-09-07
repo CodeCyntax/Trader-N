@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: trader-n
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: TRADER_AUTH_ENABLED
+        value: "true"
+      - key: TRADER_AUTH_USER
+        value: "admin"
+      - key: TRADER_AUTH_PASS
+        generateValue: true
